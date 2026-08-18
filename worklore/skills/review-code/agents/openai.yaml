@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Code"
+  short_description: "Review changes with a configured co-reviewer"
+  default_prompt: "Use $review-code to review the current changes for actionable defects."

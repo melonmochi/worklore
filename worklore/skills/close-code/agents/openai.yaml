@@ -1,0 +1,7 @@
+interface:
+  display_name: "Close Code"
+  short_description: "Prune, review, fix, and land completed code"
+  default_prompt: "Use $close-code to close this completed working-tree change."
+
+policy:
+  allow_implicit_invocation: false

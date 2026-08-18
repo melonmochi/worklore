@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sanitize Code"
+  short_description: "Inspect a repository for private residue"
+  default_prompt: "Use $sanitize-code to inspect this repository for accidental private or sensitive material before publication."

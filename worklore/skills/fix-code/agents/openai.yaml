@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fix Code"
+  short_description: "Apply verified findings by configured policy"
+  default_prompt: "Use $fix-code to verify and fix the latest actionable review findings without staging changes."

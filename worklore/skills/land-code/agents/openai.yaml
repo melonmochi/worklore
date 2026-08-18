@@ -1,0 +1,6 @@
+interface:
+  display_name: "Land Code"
+  short_description: "Stage reviewed changes, commit, and push safely"
+  default_prompt: "Use $land-code to review and stage all intended changes, then commit and push the resulting snapshot."
+policy:
+  allow_implicit_invocation: false

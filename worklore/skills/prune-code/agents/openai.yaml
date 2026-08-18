@@ -1,0 +1,4 @@
+interface:
+  display_name: "Prune Code"
+  short_description: "Delete obsolete code and unjustified complexity"
+  default_prompt: "Use $prune-code to remove obsolete code and unjustified complexity while preserving required behavior and compatibility."
