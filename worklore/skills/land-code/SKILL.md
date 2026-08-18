@@ -45,8 +45,10 @@ partially accepted working tree.
 5. Stage the complete reviewed working tree with `git add --all`. Verify that no
    unstaged or untracked paths remain and that the staged diff matches the
    reviewed snapshot. Capture a new index fingerprint.
-6. Inspect the staged content and recent history; derive one concise commit
-   message that matches repository convention.
+6. Inspect the staged content and recent history; derive one concise Conventional
+   Commit subject using `<type>[optional scope]: <description>`. Match the type
+   and scope to the actual change and repository convention; do not invent a
+   scope or breaking-change marker.
 7. Run the recorded checks and any repository-wide gate required by the
    snapshot.
 8. Recheck status and the post-staging index fingerprint. Stop unless the working

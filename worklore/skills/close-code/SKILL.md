@@ -13,7 +13,9 @@ intended change set only when its ownership is unambiguous.
 Load and follow the installed `prune-code`, `review-code`,
 `fix-code`, and `land-code` skills. They retain authority over their own
 work, including configuration decisions and transmission boundaries. Own only
-their sequence, stopping, and the final summary.
+their sequence, stopping, and the final summary. Commit naming, including the
+Conventional Commits policy, remains wholly owned by `land-code`; do not
+restate or independently enforce it here.
 
 Explicit invocation delegates the edits, review activity, staging, committing,
 and pushing already authorized by those child skills. Do not let orchestration
