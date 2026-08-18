@@ -42,7 +42,7 @@ uv --version
 Install and sync `worklore`:
 
 ```bash
-uv tool install "worklore @ git+https://HOST/OWNER/worklore.git"
+uv tool install "worklore @ git+https://github.com/melonmochi/worklore.git@v0.1.0"
 uv tool update-shell
 ```
 
