@@ -50,6 +50,17 @@ If the settings file is missing or malformed, or the value is unsupported,
 stop and report the configuration error. Do not infer a default, edit settings,
 or fall back to another reviewer.
 
+For `claude`, the helper checks authentication before reading or transmitting
+the packet. When logged out, it runs `claude auth login` interactively and
+continues only after `claude auth status --json` confirms login. Authentication
+does not transmit the packet or spend the one allowed provider invocation.
+
+If login is cancelled, times out, or cannot be verified, the helper reports
+`authorization required`. Treat this as a pre-invocation pause, not an
+incomplete audit. After the user completes Claude login, resume the same review
+at the helper invocation without repeating the independent primary review,
+provided the reviewed snapshot is unchanged.
+
 If the execution environment requires explicit user approval for the external
 transmission before the provider starts, report the co-review as paused and ask
 for that approval. After approval, resume the same review at the external

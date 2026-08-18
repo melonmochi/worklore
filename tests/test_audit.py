@@ -1,7 +1,10 @@
+import contextlib
 import hashlib
+import io
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -66,6 +69,122 @@ class ProviderBoundaryTests(unittest.TestCase):
         with mock.patch("worklore.audit.shutil.which", return_value=None):
             with self.assertRaisesRegex(audit.CoReviewError, "PATH"):
                 audit.resolve_provider("claude")
+
+    def test_claude_auth_status_is_bounded_and_noninteractive(self):
+        completed = subprocess.CompletedProcess(
+            ["claude", "auth", "status", "--json"],
+            0,
+            b'{"loggedIn": true}',
+            b"",
+        )
+        with mock.patch("worklore.audit.subprocess.run", return_value=completed) as run:
+            self.assertTrue(audit._claude_auth_status("claude"))
+        call = run.call_args
+        assert call is not None
+        self.assertEqual(
+            call.args[0], ["claude", "auth", "status", "--json"]
+        )
+        self.assertEqual(call.kwargs["stdin"], subprocess.DEVNULL)
+        self.assertEqual(call.kwargs["timeout"], audit.AUTH_STATUS_TIMEOUT_SECONDS)
+
+    def test_claude_authentication_opens_login_and_rechecks(self):
+        logged_out = subprocess.CompletedProcess(
+            ["claude", "auth", "status", "--json"],
+            1,
+            b'{"loggedIn": false}',
+            b"",
+        )
+        login = subprocess.CompletedProcess(
+            ["claude", "auth", "login"], 0, b"", b""
+        )
+        logged_in = subprocess.CompletedProcess(
+            ["claude", "auth", "status", "--json"],
+            0,
+            b'{"loggedIn": true}',
+            b"",
+        )
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            with mock.patch(
+                "worklore.audit.subprocess.run",
+                side_effect=(logged_out, login, logged_in),
+            ) as run:
+                audit._ensure_claude_authenticated("claude")
+        login_call = run.call_args_list[1]
+        self.assertEqual(login_call.args[0], ["claude", "auth", "login"])
+        self.assertIsNone(login_call.kwargs["stdin"])
+        self.assertIs(login_call.kwargs["stdout"], stderr)
+        self.assertIs(login_call.kwargs["stderr"], stderr)
+
+    def test_incomplete_claude_login_requests_resume(self):
+        with mock.patch(
+            "worklore.audit._claude_auth_status",
+            side_effect=audit.CoReviewError("status timed out"),
+        ):
+            with self.assertRaisesRegex(
+                audit.ClaudeAuthorizationRequired, "could not verify"
+            ):
+                audit._ensure_claude_authenticated("claude")
+
+        logged_out = subprocess.CompletedProcess(
+            ["claude", "auth", "status", "--json"],
+            1,
+            b'{"loggedIn": false}',
+            b"",
+        )
+        cancelled = subprocess.CompletedProcess(
+            ["claude", "auth", "login"], 1, b"", b""
+        )
+        with contextlib.redirect_stderr(io.StringIO()):
+            with mock.patch(
+                "worklore.audit.subprocess.run",
+                side_effect=(logged_out, cancelled),
+            ):
+                with self.assertRaisesRegex(
+                    audit.ClaudeAuthorizationRequired, "resume"
+                ):
+                    audit._ensure_claude_authenticated("claude")
+
+        timeout = subprocess.TimeoutExpired(["claude", "auth", "login"], 600)
+        with contextlib.redirect_stderr(io.StringIO()):
+            with mock.patch(
+                "worklore.audit._claude_auth_status", return_value=False
+            ):
+                with mock.patch("worklore.audit.subprocess.run", side_effect=timeout):
+                    with self.assertRaisesRegex(
+                        audit.ClaudeAuthorizationRequired, "timed out"
+                    ):
+                        audit._ensure_claude_authenticated("claude")
+
+    def test_auth_pause_happens_before_packet_read(self):
+        required = audit.ClaudeAuthorizationRequired("resume after login")
+        with mock.patch(
+            "worklore.audit.load_settings", return_value={"co_reviewer": "claude"}
+        ):
+            with mock.patch(
+                "worklore.audit.resolve_provider", return_value="claude"
+            ):
+                with mock.patch(
+                    "worklore.audit._ensure_claude_authenticated",
+                    side_effect=required,
+                ):
+                    with mock.patch("worklore.audit.read_packet") as read_packet:
+                        with self.assertRaises(audit.ClaudeAuthorizationRequired):
+                            audit.co_review(Path("unused"))
+        read_packet.assert_not_called()
+
+    def test_agy_resolves_provider_after_packet_validation(self):
+        invalid_packet = audit.CoReviewError("packet is invalid")
+        with mock.patch(
+            "worklore.audit.load_settings", return_value={"co_reviewer": "agy"}
+        ):
+            with mock.patch(
+                "worklore.audit.read_packet", side_effect=invalid_packet
+            ):
+                with mock.patch("worklore.audit.resolve_provider") as resolve:
+                    with self.assertRaises(audit.CoReviewError):
+                        audit.co_review(Path("invalid"))
+        resolve.assert_not_called()
 
     def test_provider_commands_preserve_narrow_authority(self):
         claude = audit._claude_command("claude", "policy")
@@ -193,6 +312,15 @@ class ProviderBoundaryTests(unittest.TestCase):
                 result = audit.co_review(Path("unused"))
         self.assertEqual(result, {"provider": "none", "status": "disabled"})
         read_packet.assert_not_called()
+
+    def test_authorization_required_uses_a_distinct_exit_code(self):
+        error = audit.ClaudeAuthorizationRequired("resume after login")
+        stderr = io.StringIO()
+        with mock.patch("worklore.audit.co_review", side_effect=error):
+            with contextlib.redirect_stderr(stderr):
+                result = audit.main(["--packet", "unused"])
+        self.assertEqual(result, 3)
+        self.assertIn("authorization required", stderr.getvalue())
 
 
 if __name__ == "__main__":

@@ -23,15 +23,26 @@ protocol owns one bounded invocation of the configured reviewer.
    worklore _co-review --packet ABSOLUTE_PACKET_PATH
    ```
 
+   For Claude, the helper checks local authentication before reading the packet.
+   If logged out, it runs `claude auth login` with inherited input and sends the
+   interactive login output to stderr. After successful login it rechecks status
+   and continues to the provider invocation automatically.
+
+   If the helper exits with `authorization required`, delete the temporary
+   packet and report a paused co-review. After the user completes Claude login,
+   verify that the reviewed snapshot is unchanged, reconstruct the packet, and
+   resume at the helper invocation. Authentication does not spend the one
+   allowed provider invocation.
+
    If the permission gate requires explicit user approval before starting the
    command, delete the temporary packet and report a paused co-review. After the
    user approves, verify that the reviewed snapshot is unchanged, reconstruct
    and freeze the packet, then continue at the invocation above. Do not repeat
    the primary review or count the blocked preflight as the one provider
    invocation. If the user declines, report an incomplete audit.
-5. The helper reads the configured reviewer from settings. If it is missing,
-   unavailable, unauthenticated, times out, exits nonzero, or returns no output,
-   report an incomplete audit. Do not install, authenticate, retry, or fall back.
+5. If the configured reviewer is missing or unavailable, or if provider
+   invocation starts and then times out, exits nonzero, or returns no output,
+   report an incomplete audit. Do not install, retry, or fall back.
 6. Delete the temporary packet. Reproduce each candidate against the repository,
    deduplicate it against the primary review, and report the returned packet
    hash with verified and rejected candidates and remaining audit gaps.

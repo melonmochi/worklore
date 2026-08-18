@@ -29,8 +29,9 @@ not design, extend, or deploy the change.
    surfaces. Continue only when pruning completes without a blocker or
    architectural expansion.
 3. Run `review-code` once. If its configured co-review pauses before provider
-   invocation solely to obtain explicit external-transmission approval, pause
-   this same closure run and ask the user. After approval, resume at the
+   invocation to obtain explicit external-transmission approval or complete
+   configured reviewer authentication, pause this same closure run. After
+   approval or authentication, resume at the
    co-review invocation without repeating prune or the independent primary
    review, provided the reviewed snapshot is unchanged. Do not run `fix-code`
    or `land-code` while paused. If the user declines, or if the configured
@@ -48,10 +49,10 @@ satisfied, proceed directly to the checks owned by `land-code`.
 ## Stop
 
 Honor every child skill's stop conditions. A pre-invocation permission request
-is a pause, not a closure blocker. An incomplete configured co-review after
-invocation starts or permission is declined is a closure blocker, not an
-actionable finding to address inside the same run. Also stop when closure would
-require broader product scope or a new owner decision.
+or authentication requirement is a pause, not a closure blocker. An incomplete
+configured co-review after invocation starts or permission is declined is a
+closure blocker, not an actionable finding to address inside the same run. Also
+stop when closure would require broader product scope or a new owner decision.
 
 ## Report
 
