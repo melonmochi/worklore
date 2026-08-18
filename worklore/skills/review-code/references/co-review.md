@@ -17,22 +17,22 @@ protocol owns one bounded invocation of the configured reviewer.
    reviewer. If the execution environment blocks outbound network access,
    request the minimum permission needed before invoking; do not spend the
    single invocation on a known network-blocked attempt. Then invoke exactly
-   once:
+   once.
 
    ```sh
    worklore _co-review --packet ABSOLUTE_PACKET_PATH
    ```
 
    For Claude, the helper checks local authentication before reading the packet.
-   If logged out, it runs `claude auth login` with inherited input and sends the
-   interactive login output to stderr. After successful login it rechecks status
-   and continues to the provider invocation automatically.
+   Logged-out or unverifiable status exits with `authorization required`
+   without opening a login flow.
 
    If the helper exits with `authorization required`, delete the temporary
-   packet and report a paused co-review. After the user completes Claude login,
-   verify that the reviewed snapshot is unchanged, reconstruct the packet, and
-   resume at the helper invocation. Authentication does not spend the one
-   allowed provider invocation.
+   packet and report a paused co-review. Ask the user to run `claude auth login`
+   in a terminal they control. Never ask them to paste, send, or expose a
+   one-time authorization code. After login, verify that the reviewed snapshot
+   is unchanged, reconstruct the packet, and resume at the helper invocation.
+   Authentication does not spend the one allowed provider invocation.
 
    If the permission gate requires explicit user approval before starting the
    command, delete the temporary packet and report a paused co-review. After the

@@ -135,43 +135,11 @@ def _ensure_claude_authenticated(executable: str) -> None:
             f"could not verify Claude authentication: {error}"
         ) from error
 
-    print(
-        "worklore co-review: Claude authentication required; opening login",
-        file=sys.stderr,
-        flush=True,
+    raise ClaudeAuthorizationRequired(
+        "Claude is logged out; run `claude auth login` in a "
+        "user-controlled terminal, keep the one-time authorization code "
+        "in that terminal, then resume"
     )
-    try:
-        completed = subprocess.run(
-            [executable, "auth", "login"],
-            stdin=None,
-            stdout=sys.stderr,
-            stderr=sys.stderr,
-            timeout=PROVIDER_TIMEOUT_SECONDS,
-            check=False,
-        )
-    except FileNotFoundError as error:
-        raise CoReviewError(f"executable not found: {executable}") from error
-    except subprocess.TimeoutExpired as error:
-        raise ClaudeAuthorizationRequired(
-            "Claude login timed out; resume after completing `claude auth login`"
-        ) from error
-
-    if completed.returncode != 0:
-        raise ClaudeAuthorizationRequired(
-            "Claude login was not completed; resume after running "
-            "`claude auth login`"
-        )
-    try:
-        logged_in = _claude_auth_status(executable)
-    except CoReviewError as error:
-        raise ClaudeAuthorizationRequired(
-            f"could not verify Claude login: {error}"
-        ) from error
-    if not logged_in:
-        raise ClaudeAuthorizationRequired(
-            "Claude is still logged out; resume after completing "
-            "`claude auth login`"
-        )
 
 
 def _run(command: Sequence[str], *, cwd: Path, input_bytes: bytes | None = None) -> str:
