@@ -57,8 +57,12 @@ partially accepted working tree.
    committing.
 9. Create one new commit. Never amend or bypass hooks.
 10. For initial publication, push with
-    `git push --set-upstream <remote> <branch>`. Otherwise, push with plain
-    `git push` to the verified upstream.
+    `git push --set-upstream <remote> <branch>`. Otherwise, delegate the bounded
+    publication to
+    `worklore _push-reviewed --expected-head <full-commit-sha>`. The helper must
+    confirm the clean current branch is exactly that commit and exactly one
+    commit ahead of its existing upstream; do not invoke plain `git push` as a
+    fallback.
 11. Report the commit SHA, subject, branch, upstream, checks, staged paths, and
     final status.
 
