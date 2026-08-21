@@ -87,23 +87,39 @@ class ProviderBoundaryTests(unittest.TestCase):
         self.assertEqual(call.kwargs["stdin"], subprocess.DEVNULL)
         self.assertEqual(call.kwargs["timeout"], audit.AUTH_STATUS_TIMEOUT_SECONDS)
 
-    def test_logged_out_claude_requests_user_controlled_login(self):
+    def test_logged_out_claude_opens_noninteractive_login_and_rechecks(self):
         logged_out = subprocess.CompletedProcess(
             ["claude", "auth", "status", "--json"],
             1,
             b'{"loggedIn": false}',
             b"",
         )
+        login = subprocess.CompletedProcess(
+            ["claude", "auth", "login"], 0, b"", b""
+        )
+        logged_in = subprocess.CompletedProcess(
+            ["claude", "auth", "status", "--json"],
+            0,
+            b'{"loggedIn": true}',
+            b"",
+        )
+        stderr = io.StringIO()
         with mock.patch(
-            "worklore.audit.subprocess.run", return_value=logged_out
+            "worklore.audit.subprocess.run",
+            side_effect=(logged_out, login, logged_in),
         ) as run:
-            with self.assertRaisesRegex(
-                audit.ClaudeAuthorizationRequired, "user-controlled terminal"
-            ):
+            with contextlib.redirect_stderr(stderr):
                 audit._ensure_claude_authenticated("claude")
-        self.assertEqual(run.call_count, 1)
+        login_call = run.call_args_list[1]
+        self.assertEqual(login_call.args[0], ["claude", "auth", "login"])
+        self.assertEqual(login_call.kwargs["stdin"], subprocess.DEVNULL)
+        self.assertIs(login_call.kwargs["stdout"], stderr)
+        self.assertIs(login_call.kwargs["stderr"], stderr)
+        self.assertEqual(
+            login_call.kwargs["timeout"], audit.PROVIDER_TIMEOUT_SECONDS
+        )
 
-    def test_unverifiable_claude_authentication_requests_resume(self):
+    def test_incomplete_claude_login_requests_resume(self):
         with mock.patch(
             "worklore.audit._claude_auth_status",
             side_effect=audit.CoReviewError("status timed out"),
@@ -112,6 +128,26 @@ class ProviderBoundaryTests(unittest.TestCase):
                 audit.ClaudeAuthorizationRequired, "could not verify"
             ):
                 audit._ensure_claude_authenticated("claude")
+
+        cancelled = subprocess.CompletedProcess(
+            ["claude", "auth", "login"], 1, b"", b""
+        )
+        with mock.patch(
+            "worklore.audit.subprocess.run", return_value=cancelled
+        ):
+            with contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaisesRegex(
+                    audit.ClaudeAuthorizationRequired, "did not complete"
+                ):
+                    audit._claude_login("claude")
+
+        timeout = subprocess.TimeoutExpired(["claude", "auth", "login"], 600)
+        with mock.patch("worklore.audit.subprocess.run", side_effect=timeout):
+            with contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaisesRegex(
+                    audit.ClaudeAuthorizationRequired, "timed out"
+                ):
+                    audit._claude_login("claude")
 
     def test_auth_pause_happens_before_packet_read(self):
         required = audit.ClaudeAuthorizationRequired("resume after login")
@@ -211,6 +247,58 @@ class ProviderBoundaryTests(unittest.TestCase):
         with mock.patch("worklore.audit.subprocess.run", return_value=empty):
             with self.assertRaisesRegex(audit.CoReviewError, "permission denied"):
                 audit._run(["agy"], cwd=Path.cwd())
+
+    def test_expired_claude_session_logs_in_and_retries_once(self):
+        expired = audit.CoReviewError(
+            "claude exited with code 1: OAuth session expired"
+        )
+        with mock.patch("worklore.audit.review_policy", return_value="policy"):
+            with mock.patch(
+                "worklore.audit._run",
+                side_effect=(expired, "No candidate findings."),
+            ) as run:
+                with mock.patch("worklore.audit._claude_login") as login:
+                    result = audit.invoke_provider(
+                        "claude", "claude", b"packet"
+                    )
+        self.assertEqual(result, "No candidate findings.")
+        login.assert_called_once_with("claude")
+        self.assertEqual(run.call_count, 2)
+
+        with mock.patch("worklore.audit.review_policy", return_value="policy"):
+            with mock.patch(
+                "worklore.audit._run", side_effect=(expired, expired)
+            ):
+                with mock.patch("worklore.audit._claude_login"):
+                    with self.assertRaisesRegex(
+                        audit.CoReviewError, "again after one"
+                    ) as raised:
+                        audit.invoke_provider("claude", "claude", b"packet")
+        self.assertNotIsInstance(
+            raised.exception, audit.ClaudeAuthorizationRequired
+        )
+        self.assertIn("OAuth session expired", str(raised.exception))
+
+        unrelated = audit.CoReviewError(
+            "claude exited with code 1: proxy authentication required"
+        )
+        with mock.patch("worklore.audit.review_policy", return_value="policy"):
+            with mock.patch("worklore.audit._run", side_effect=unrelated):
+                with mock.patch("worklore.audit._claude_login") as login:
+                    with self.assertRaises(audit.CoReviewError) as raised:
+                        audit.invoke_provider("claude", "claude", b"packet")
+        login.assert_not_called()
+        self.assertNotIsInstance(
+            raised.exception, audit.ClaudeAuthorizationRequired
+        )
+
+        with mock.patch("worklore.audit.review_policy", return_value="policy"):
+            with mock.patch("worklore.audit._run", side_effect=expired):
+                with self.assertRaises(audit.CoReviewError) as raised:
+                    audit.invoke_provider("agy", "agy", b"packet")
+        self.assertNotIsInstance(
+            raised.exception, audit.ClaudeAuthorizationRequired
+        )
 
     def test_agy_stream_failures_are_explicit(self):
         with self.assertRaisesRegex(audit.CoReviewError, "UTF-8"):

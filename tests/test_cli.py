@@ -243,9 +243,14 @@ class SkillContractTests(unittest.TestCase):
     def test_close_code_pauses_for_approval_and_stops_on_incomplete_review(self):
         close_code = self.skill_text("close-code")
         self.assertIn("co-review pauses before provider\n   invocation", close_code)
-        self.assertIn("resume at the\n   co-review invocation", close_code)
-        self.assertIn("Do not run `fix-code`\n   or `land-code` while paused", close_code)
-        self.assertIn("co-review is incomplete after invocation begins", close_code)
+        self.assertIn("resume at the co-review invocation", close_code)
+        self.assertIn("complete browser authentication", close_code)
+        self.assertIn("one allowed replacement invocation", close_code)
+        self.assertIn("Do\n   not run `fix-code` or `land-code` while paused", close_code)
+        self.assertIn(
+            "remains incomplete after its allowed authentication\n   recovery",
+            close_code,
+        )
 
 
 if __name__ == "__main__":

@@ -51,15 +51,20 @@ stop and report the configuration error. Do not infer a default, edit settings,
 or fall back to another reviewer.
 
 For `claude`, the helper checks authentication before reading or transmitting
-the packet. Logged-out or unverifiable status produces `authorization required`
-without opening a login flow.
+the packet. If Claude is logged out, the helper opens Claude's browser login,
+waits with a bounded timeout and no inherited stdin, rechecks authentication,
+and continues automatically. An unverifiable status produces
+`authorization required` without opening a login flow.
 
-Treat `authorization required` as a pre-invocation pause, not an incomplete
-audit. Ask the user to run `claude auth login` in a terminal they control.
-Never ask them to paste, send, or expose a one-time authorization code. After
-login, resume the same review at the helper invocation without repeating the
-independent primary review, provided the reviewed snapshot is unchanged.
-Authentication does not transmit the packet or spend the provider invocation.
+Claude may explicitly reject an expired session even when `claude auth status`
+reported `loggedIn`. In that case the helper opens the same browser login and
+retries the unchanged packet exactly once. If automatic login cannot complete,
+ask the user to run `claude auth login` in a terminal they control, then resume
+the same review at the helper invocation without repeating the independent
+primary review, provided the reviewed snapshot is unchanged. Never ask them to
+paste, send, or expose a one-time authorization code. If the one replacement
+invocation also rejects authentication, stop the audit as incomplete; do not
+loop. Other provider failures remain incomplete and must not be retried.
 
 If the execution environment requires explicit user approval for the external
 transmission before the provider starts, report the co-review as paused and ask

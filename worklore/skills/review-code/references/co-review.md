@@ -24,15 +24,23 @@ protocol owns one bounded invocation of the configured reviewer.
    ```
 
    For Claude, the helper checks local authentication before reading the packet.
-   Logged-out or unverifiable status exits with `authorization required`
-   without opening a login flow.
+   If Claude is logged out, it opens Claude's browser login, gives the local
+   callback a bounded wait without inherited stdin, rechecks authentication,
+   and continues automatically. An unverifiable status exits with
+   `authorization required` without opening a login flow. Claude may also reject
+   an expired session during provider execution even when `claude auth status`
+   reported `loggedIn`; the helper then runs the same browser login and retries
+   the unchanged packet exactly once.
 
    If the helper exits with `authorization required`, delete the temporary
    packet and report a paused co-review. Ask the user to run `claude auth login`
    in a terminal they control. Never ask them to paste, send, or expose a
    one-time authorization code. After login, verify that the reviewed snapshot
    is unchanged, reconstruct the packet, and resume at the helper invocation.
-   Authentication does not spend the one allowed provider invocation.
+   If provider execution had started, do not claim the packet was never
+   transmitted. The helper owns the single replacement invocation after an
+   explicit authentication rejection. If that replacement also rejects
+   authentication, stop with an incomplete audit; do not loop.
 
    If the permission gate requires explicit user approval before starting the
    command, delete the temporary packet and report a paused co-review. After the
@@ -40,9 +48,10 @@ protocol owns one bounded invocation of the configured reviewer.
    and freeze the packet, then continue at the invocation above. Do not repeat
    the primary review or count the blocked preflight as the one provider
    invocation. If the user declines, report an incomplete audit.
-5. If the configured reviewer is missing or unavailable, or if provider
-   invocation starts and then times out, exits nonzero, or returns no output,
-   report an incomplete audit. Do not install, retry, or fall back.
+5. Except for the single explicit Claude authentication replacement above, if
+   the configured reviewer is missing or unavailable, or if provider invocation
+   starts and then times out, exits nonzero, or returns no output, report an
+   incomplete audit. Do not install, retry, or fall back.
 6. Delete the temporary packet. Reproduce each candidate against the repository,
    deduplicate it against the primary review, and report the returned packet
    hash with verified and rejected candidates and remaining audit gaps.

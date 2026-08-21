@@ -22,6 +22,11 @@ AUTH_STATUS_TIMEOUT_SECONDS = 30
 PROVIDER_TIMEOUT_SECONDS = 10 * 60
 PACKET_FILENAME = "REVIEW_PACKET.md"
 
+CLAUDE_AUTH_ERROR_MARKERS = (
+    "oauth session expired",
+    "please run /login",
+)
+
 SECRET_PATTERNS = (
     (
         "private key",
@@ -50,7 +55,7 @@ class CoReviewError(Exception):
 
 
 class ClaudeAuthorizationRequired(CoReviewError):
-    """Claude login did not complete before provider invocation."""
+    """Claude authentication must be refreshed before co-review can complete."""
 
 
 def read_packet(path: Path) -> bytes:
@@ -135,11 +140,53 @@ def _ensure_claude_authenticated(executable: str) -> None:
             f"could not verify Claude authentication: {error}"
         ) from error
 
-    raise ClaudeAuthorizationRequired(
-        "Claude is logged out; run `claude auth login` in a "
-        "user-controlled terminal, keep the one-time authorization code "
-        "in that terminal, then resume"
+    _claude_login(executable)
+
+
+def _claude_login(executable: str) -> None:
+    print(
+        "worklore co-review: Claude authentication required; opening browser login",
+        file=sys.stderr,
+        flush=True,
     )
+    try:
+        completed = subprocess.run(
+            [executable, "auth", "login"],
+            stdin=subprocess.DEVNULL,
+            stdout=sys.stderr,
+            stderr=sys.stderr,
+            timeout=PROVIDER_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except FileNotFoundError as error:
+        raise CoReviewError(f"executable not found: {executable}") from error
+    except subprocess.TimeoutExpired as error:
+        raise ClaudeAuthorizationRequired(
+            "automatic Claude browser login timed out; run `claude auth login` "
+            "in a user-controlled terminal, then resume"
+        ) from error
+
+    if completed.returncode != 0:
+        raise ClaudeAuthorizationRequired(
+            "automatic Claude browser login did not complete; run "
+            "`claude auth login` in a user-controlled terminal, then resume"
+        )
+    try:
+        logged_in = _claude_auth_status(executable)
+    except CoReviewError as error:
+        raise ClaudeAuthorizationRequired(
+            f"could not verify Claude login: {error}"
+        ) from error
+    if not logged_in:
+        raise ClaudeAuthorizationRequired(
+            "Claude is still logged out after automatic browser login; run "
+            "`claude auth login` in a user-controlled terminal, then resume"
+        )
+
+
+def _is_claude_auth_error(error: CoReviewError) -> bool:
+    detail = str(error).casefold()
+    return any(marker in detail for marker in CLAUDE_AUTH_ERROR_MARKERS)
 
 
 def _run(command: Sequence[str], *, cwd: Path, input_bytes: bytes | None = None) -> str:
@@ -264,7 +311,21 @@ def invoke_provider(provider: str, executable: str, packet: bytes) -> str:
             input_bytes = _agy_input(policy, packet)
         else:
             raise CoReviewError(f"unsupported co-reviewer: {provider}")
-        result = _run(command, cwd=directory, input_bytes=input_bytes)
+        try:
+            result = _run(command, cwd=directory, input_bytes=input_bytes)
+        except CoReviewError as error:
+            if provider != "claude" or not _is_claude_auth_error(error):
+                raise
+            _claude_login(executable)
+            try:
+                result = _run(command, cwd=directory, input_bytes=input_bytes)
+            except CoReviewError as retry_error:
+                if _is_claude_auth_error(retry_error):
+                    raise CoReviewError(
+                        "Claude rejected authentication again after one "
+                        f"automatic browser login: {retry_error}"
+                    ) from retry_error
+                raise
     return _agy_result(result) if provider == "agy" else result
 
 

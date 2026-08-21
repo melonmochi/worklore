@@ -31,13 +31,15 @@ not design, extend, or deploy the change.
 3. Run `review-code` once. If its configured co-review pauses before provider
    invocation to obtain explicit external-transmission approval or complete
    configured reviewer authentication, pause this same closure run. After
-   approval or authentication, resume at the
-   co-review invocation without repeating prune or the independent primary
-   review, provided the reviewed snapshot is unchanged. Do not run `fix-code`
-   or `land-code` while paused. If the user declines, or if the configured
-   co-review is incomplete after invocation begins, stop `close-code`
-   immediately. Do not run `fix-code` to repair review infrastructure within
-   the same closure run, and do not proceed to `land-code`.
+   approval or authentication, resume at the co-review invocation without
+   repeating prune or the independent primary review, provided the reviewed
+   snapshot is unchanged. The helper may complete browser authentication and
+   its one allowed replacement invocation without an orchestration pause. Do
+   not run `fix-code` or `land-code` while paused. If the user declines, or if
+   the configured co-review remains incomplete after its allowed authentication
+   recovery, stop `close-code` immediately. Do not run `fix-code` to repair
+   review infrastructure within the same closure run, and do not proceed to
+   `land-code`.
 4. If actionable findings exist, run `fix-code`. Continue only when it completes
    without a verified finding that the configured addressing policy requires it
    to fix.
@@ -49,10 +51,11 @@ satisfied, proceed directly to the checks owned by `land-code`.
 ## Stop
 
 Honor every child skill's stop conditions. A pre-invocation permission request
-or authentication requirement is a pause, not a closure blocker. An incomplete
-configured co-review after invocation starts or permission is declined is a
-closure blocker, not an actionable finding to address inside the same run. Also
-stop when closure would require broader product scope or a new owner decision.
+or unresolved authentication requirement is a pause, not a closure blocker.
+An incomplete co-review after the helper's allowed authentication recovery, or
+declined permission, is a closure blocker rather than an actionable finding to
+address inside the same run. Also stop when closure would require broader
+product scope or a new owner decision.
 
 ## Report
 
