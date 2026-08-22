@@ -1,8 +1,9 @@
 # Worklore
 
 Small, opinionated engineering workflows for coding agents, distributed as a
-user-level tool. The current package installs them into Codex; consuming
-repositories require no configuration, vendoring, submodules, or dependencies.
+user-level tool. Codex and Hermes consume the same installed skill bundles;
+consuming repositories require no configuration, vendoring, submodules, or
+dependencies.
 
 ```text
 skills    = stable behavior
@@ -60,9 +61,10 @@ uv tool upgrade worklore
 worklore sync
 ```
 
-`sync` copies packaged skills to Codex's user-level skill directory,
-`$HOME/.agents/skills`. It never deletes unrelated skills. If same-name skills were
-installed manually, move them aside before the first sync.
+`sync` copies packaged skills to `$HOME/.agents/skills`, where Codex and Hermes
+discover the same files. It creates no agent-specific copy or fork and never
+deletes unrelated skills. Move same-name manual installs aside before the first
+sync.
 
 External audits use the package's Python standard-library runner on macOS,
 Linux, and Windows; no platform-specific audit binary is bundled.
