@@ -358,6 +358,41 @@ class ProviderBoundaryTests(unittest.TestCase):
         self.assertEqual(result, {"provider": "none", "status": "disabled"})
         read_packet.assert_not_called()
 
+    def test_main_emits_unicode_json_through_a_legacy_windows_stream(self):
+        expected = {
+            "provider": "claude",
+            "snapshotSha256": "abc123",
+            "audit": "«sí» — 中文",
+        }
+        raw_stdout = io.BytesIO()
+        raw_stderr = io.BytesIO()
+        stdout = io.TextIOWrapper(
+            raw_stdout,
+            encoding="gbk",
+            write_through=True,
+        )
+        stderr = io.TextIOWrapper(
+            raw_stderr,
+            encoding="gbk",
+            errors="backslashreplace",
+            write_through=True,
+        )
+
+        with mock.patch("worklore.audit.co_review", return_value=expected):
+            with contextlib.redirect_stdout(stdout):
+                with contextlib.redirect_stderr(stderr):
+                    result = audit.main(["--packet", "unused"])
+
+        rendered = raw_stdout.getvalue().decode("utf-8")
+
+        self.assertEqual(result, 0)
+        self.assertEqual(json.loads(rendered), expected)
+        self.assertIn("«sí» — 中文", rendered)
+        self.assertEqual(stdout.encoding, "utf-8")
+        self.assertEqual(stderr.encoding, "utf-8")
+        self.assertEqual(stderr.errors, "backslashreplace")
+        self.assertEqual(raw_stderr.getvalue(), b"")
+
     def test_authorization_required_uses_a_distinct_exit_code(self):
         error = audit.ClaudeAuthorizationRequired("resume after login")
         stderr = io.StringIO()

@@ -350,7 +350,15 @@ def co_review(packet_path: Path) -> dict[str, object]:
     return result
 
 
+def _configure_utf8_standard_streams() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors=getattr(stream, "errors", None))
+
+
 def main(argv: Sequence[str] | None = None) -> int:
+    _configure_utf8_standard_streams()
     parser = argparse.ArgumentParser(prog="worklore _co-review")
     parser.add_argument("--packet", type=Path, required=True)
     arguments = parser.parse_args(argv)
