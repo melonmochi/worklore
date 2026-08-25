@@ -342,6 +342,36 @@ class SkillContractTests(unittest.TestCase):
         self.assertIn("git push --set-upstream <remote> <branch>", land_code)
         self.assertIn("do not invoke plain `git push` as a\n    fallback", land_code)
 
+    def test_land_code_owns_replacement_authorization_and_its_boundaries(self):
+        land_code = " ".join(self.skill_text("land-code").split())
+        close_code = " ".join(self.skill_text("close-code").split())
+
+        self.assertIn(
+            "later explicit `$land-code`, `/land-code`, `$close-code`, or "
+            "`/close-code` invocation as replacement landing authorization",
+            land_code,
+        )
+        self.assertIn("supersedes an earlier turn-local instruction", land_code)
+        self.assertIn("do not ask the owner to repeat", land_code)
+        self.assertIn("request tool approval directly", land_code)
+        self.assertIn(
+            "State in the justification that the later explicit skill invocation "
+            "authorizes staging, committing, and pushing the current snapshot; "
+            "replaces the earlier turn-local temporary restriction; and remains "
+            "subject to the `land-code` Stop Conditions",
+            land_code,
+        )
+        for boundary in (
+            "restriction the owner restates in that invocation",
+            "persistent `AGENTS.md`, repository, organization, or platform policy",
+            "ambiguous working-tree ownership",
+            "unresolved external-transmission boundary",
+            "the Stop Conditions below",
+            "another repository, snapshot, or future operation",
+        ):
+            self.assertIn(boundary, land_code)
+        self.assertNotIn("replacement landing authorization", close_code)
+
 
 if __name__ == "__main__":
     unittest.main()

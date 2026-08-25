@@ -9,6 +9,23 @@ Explicit invocation of this skill, or delegation from an explicit `$close-code`
 or `/close-code` invocation, authorizes staging, committing, and pushing the
 reviewed snapshot. It does not authorize editing file contents.
 
+Treat a later explicit `$land-code`, `/land-code`, `$close-code`, or
+`/close-code` invocation as replacement landing authorization for the current,
+unambiguously owned, reviewed snapshot. It supersedes an earlier turn-local
+instruction to temporarily withhold commit or push for that same snapshot; do
+not ask the owner to repeat the landing authorization. It does not override a
+restriction the owner restates in that invocation; persistent `AGENTS.md`,
+repository, organization, or platform policy; ambiguous working-tree ownership;
+an unresolved external-transmission boundary; the Stop Conditions below; or
+authorization requirements for another repository, snapshot, or future
+operation.
+
+If the platform requires approval for a Git operation, request tool approval
+directly instead of asking the owner for landing authorization again. State in
+the justification that the later explicit skill invocation authorizes staging,
+committing, and pushing the current snapshot; replaces the earlier turn-local
+temporary restriction; and remains subject to the `land-code` Stop Conditions.
+
 ## Stop Conditions
 
 Stop before committing when any of these is true:
