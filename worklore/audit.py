@@ -255,7 +255,6 @@ def _agy_command(executable: str) -> list[str]:
         "--sandbox",
         "--disable-slash-commands",
         "--effort", "high",
-        "--print", "",
     ]
 
 
@@ -265,9 +264,8 @@ def _agy_input(policy: str, packet: bytes) -> bytes:
     except UnicodeDecodeError as error:
         raise CoReviewError("agy requires a UTF-8 review packet") from error
     message = {
-        "type": "user",
+        "event": "user",
         "message": {
-            "role": "user",
             "content": f"{policy}\n\n# Frozen review packet\n\n{packet_text}",
         },
     }

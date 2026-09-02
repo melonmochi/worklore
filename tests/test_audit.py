@@ -189,7 +189,7 @@ class ProviderBoundaryTests(unittest.TestCase):
         self.assertIn("--sandbox", agy)
         self.assertEqual(agy[agy.index("--input-format") + 1], "stream-json")
         self.assertEqual(agy[agy.index("--output-format") + 1], "stream-json")
-        self.assertEqual(agy[agy.index("--print") + 1], "")
+        self.assertNotIn("--print", agy)
         self.assertNotIn("--continue", agy)
 
     def test_provider_runs_in_ephemeral_directory_with_exact_packet(self):
@@ -211,7 +211,9 @@ class ProviderBoundaryTests(unittest.TestCase):
                         return "No candidate findings."
                     assert input_bytes is not None
                     payload = json.loads(input_bytes)
-                    self.assertEqual(payload["type"], "user")
+                    self.assertEqual(set(payload), {"event", "message"})
+                    self.assertEqual(payload["event"], "user")
+                    self.assertEqual(set(payload["message"]), {"content"})
                     content = payload["message"]["content"]
                     self.assertTrue(content.startswith("policy\n\n"))
                     self.assertTrue(content.endswith(packet.decode("utf-8")))
