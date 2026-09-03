@@ -70,8 +70,59 @@ class ProviderBoundaryTests(unittest.TestCase):
             with self.assertRaisesRegex(audit.CoReviewError, "PATH"):
                 audit.resolve_provider("claude")
 
+    def test_agy_resolution_prefers_path_over_managed_installation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            managed = home / ".gemini" / "bin" / "agy"
+            managed.parent.mkdir(parents=True)
+            managed.write_bytes(b"managed")
+            managed.chmod(0o755)
+
+            with mock.patch(
+                "worklore.audit.shutil.which", return_value="/bin/agy"
+            ):
+                with mock.patch("worklore.audit.Path.home") as path_home:
+                    self.assertEqual(
+                        audit.resolve_provider("agy"), str(Path("/bin/agy").resolve())
+                    )
+            path_home.assert_not_called()
+
+    def test_agy_resolution_uses_extension_managed_unix_binary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            executable = home / ".gemini" / "bin" / "agy"
+            executable.parent.mkdir(parents=True)
+            executable.write_bytes(b"agy")
+            executable.chmod(0o755)
+            legacy = home / ".local" / "bin" / "agy"
+            legacy.parent.mkdir(parents=True)
+            legacy.write_bytes(b"legacy")
+            legacy.chmod(0o755)
+
+            with mock.patch("worklore.audit.shutil.which", return_value=None):
+                with mock.patch("worklore.audit.Path.home", return_value=home):
+                    with mock.patch.object(audit.os, "name", "posix"):
+                        self.assertEqual(
+                            audit.resolve_provider("agy"), str(executable.resolve())
+                        )
+
+    def test_agy_resolution_uses_extension_managed_windows_executable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            executable = home / ".gemini" / "bin" / "agy.exe"
+            executable.parent.mkdir(parents=True)
+            executable.write_bytes(b"agy")
+            executable.chmod(0o755)
+
+            with mock.patch("worklore.audit.shutil.which", return_value=None):
+                with mock.patch("worklore.audit.Path.home", return_value=home):
+                    with mock.patch.object(audit.os, "name", "nt"):
+                        self.assertEqual(
+                            audit.resolve_provider("agy"), str(executable.resolve())
+                        )
+
     @unittest.skipIf(os.name == "nt", "Unix installer convention")
-    def test_agy_resolution_uses_official_install_location_when_path_misses(self):
+    def test_agy_resolution_retains_legacy_install_location(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
             executable = home / ".local" / "bin" / "agy"
@@ -85,17 +136,39 @@ class ProviderBoundaryTests(unittest.TestCase):
                         audit.resolve_provider("agy"), str(executable.resolve())
                     )
 
-    def test_agy_resolution_remains_fail_closed_when_unavailable(self):
-        with tempfile.TemporaryDirectory() as directory:
-            with mock.patch.dict("worklore.audit.os.environ", {}, clear=True):
-                with mock.patch("worklore.audit.shutil.which", return_value=None):
-                    with mock.patch(
-                        "worklore.audit.Path.home", return_value=Path(directory)
+    def test_missing_or_invalid_agy_remains_fail_closed_with_exit_two(self):
+        for invalid in (False, True):
+            with self.subTest(invalid=invalid):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    packet = root / "packet.md"
+                    packet.write_text("# Safe packet\n", encoding="utf-8")
+                    if invalid:
+                        executable_name = "agy.exe" if os.name == "nt" else "agy"
+                        executable = root / ".gemini" / "bin" / executable_name
+                        executable.parent.mkdir(parents=True)
+                        executable.write_bytes(b"not an executable")
+                        executable.chmod(0o644)
+                    stderr = io.StringIO()
+                    with (
+                        mock.patch.dict(
+                            "worklore.audit.os.environ", {}, clear=True
+                        ),
+                        mock.patch(
+                            "worklore.audit.shutil.which", return_value=None
+                        ),
+                        mock.patch("worklore.audit.Path.home", return_value=root),
+                        mock.patch("worklore.audit.os.access", return_value=False),
+                        mock.patch(
+                            "worklore.audit.load_settings",
+                            return_value={"co_reviewer": "agy"},
+                        ),
+                        contextlib.redirect_stderr(stderr),
                     ):
-                        with self.assertRaisesRegex(
-                            audit.CoReviewError, "standard install location"
-                        ):
-                            audit.resolve_provider("agy")
+                        result = audit.main(["--packet", str(packet)])
+
+                    self.assertEqual(result, 2)
+                    self.assertIn("known install location", stderr.getvalue())
 
     def test_claude_auth_status_is_bounded_and_noninteractive(self):
         completed = subprocess.CompletedProcess(

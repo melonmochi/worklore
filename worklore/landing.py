@@ -1,25 +1,85 @@
 from __future__ import annotations
 
+import hashlib
+import os
 import re
+import stat
 import subprocess
+from pathlib import Path
 
 from . import WorkloreError
 
 GIT_OBJECT_ID = re.compile(r"^[0-9a-f]+$")
+SNAPSHOT_ID = re.compile(r"^[0-9a-f]{64}$")
 
 
-def _git_output(*arguments: str) -> str:
+def _git_bytes(*arguments: str) -> bytes:
     result = subprocess.run(
         ["git", *arguments],
         check=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True,
     )
     if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip() or "git command failed"
+        detail = (
+            result.stderr.decode("utf-8", errors="replace").strip()
+            or result.stdout.decode("utf-8", errors="replace").strip()
+            or "git command failed"
+        )
         raise WorkloreError(detail)
-    return result.stdout.strip()
+    return result.stdout
+
+
+def _git_output(*arguments: str) -> str:
+    return _git_bytes(*arguments).decode("utf-8", errors="surrogateescape").strip()
+
+
+def _digest_part(digest, value: bytes) -> None:
+    digest.update(len(value).to_bytes(8, "big"))
+    digest.update(value)
+
+
+def reviewed_snapshot() -> str:
+    if _git_output("rev-parse", "--is-inside-work-tree") != "true":
+        raise WorkloreError("current directory is not a Git working tree")
+    if _git_output("ls-files", "--unmerged"):
+        raise WorkloreError("index contains unresolved merges")
+
+    digest = hashlib.sha256()
+    changed = _git_bytes(
+        "diff",
+        "--name-only",
+        "-z",
+        "--no-ext-diff",
+        "--no-renames",
+        "HEAD",
+        "--",
+    ).split(b"\0")
+    untracked = _git_bytes(
+        "ls-files", "--others", "--exclude-standard", "-z"
+    ).split(b"\0")
+    for raw_path in sorted(set(changed + untracked) - {b""}):
+        path = Path(os.fsdecode(raw_path))
+        try:
+            metadata = path.lstat()
+        except FileNotFoundError:
+            _digest_part(digest, raw_path)
+            _digest_part(digest, b"missing")
+            continue
+        if stat.S_ISREG(metadata.st_mode):
+            content = path.read_bytes()
+        elif stat.S_ISLNK(metadata.st_mode):
+            content = os.fsencode(os.readlink(path))
+        elif stat.S_ISDIR(metadata.st_mode):
+            content = _git_bytes(
+                "-C", os.fsdecode(raw_path), "rev-parse", "--verify", "HEAD"
+            ).strip()
+        else:
+            raise WorkloreError(f"unsupported snapshot path: {path}")
+        _digest_part(digest, raw_path)
+        _digest_part(digest, str(metadata.st_mode).encode("ascii"))
+        _digest_part(digest, content)
+    return digest.hexdigest()
 
 
 def _tracking_target(branch: str) -> tuple[str, str, str]:
@@ -42,7 +102,7 @@ def _require_expected_head(expected_head: str) -> str:
     return head
 
 
-def _require_staged_tree(expected_tree: str) -> str:
+def _require_staged_tree(expected_tree: str | None = None) -> str:
     if _git_output("ls-files", "--unmerged"):
         raise WorkloreError("index contains unresolved merges")
     if _git_output("diff", "--name-only") or _git_output(
@@ -52,14 +112,25 @@ def _require_staged_tree(expected_tree: str) -> str:
     if not _git_output("diff", "--cached", "--name-only"):
         raise WorkloreError("index contains no changes to commit")
     tree = _git_output("write-tree")
-    if not GIT_OBJECT_ID.fullmatch(expected_tree) or expected_tree != tree:
+    if expected_tree is not None and (
+        not GIT_OBJECT_ID.fullmatch(expected_tree) or expected_tree != tree
+    ):
         raise WorkloreError(
             f"expected index tree {expected_tree!r} does not equal current tree {tree}"
         )
     return tree
 
 
-def land_reviewed(expected_head: str, expected_tree: str, message: str) -> str:
+def _require_reviewed_snapshot(expected_snapshot: str) -> None:
+    snapshot = reviewed_snapshot()
+    if not SNAPSHOT_ID.fullmatch(expected_snapshot) or expected_snapshot != snapshot:
+        raise WorkloreError(
+            f"expected snapshot {expected_snapshot!r} does not equal current "
+            f"snapshot {snapshot}"
+        )
+
+
+def land_reviewed(expected_head: str, expected_snapshot: str, message: str) -> str:
     if _git_output("rev-parse", "--is-inside-work-tree") != "true":
         raise WorkloreError("current directory is not a Git working tree")
 
@@ -68,7 +139,9 @@ def land_reviewed(expected_head: str, expected_tree: str, message: str) -> str:
     remote, merge_ref, _ = _tracking_target(branch)
     if not message.strip() or "\n" in message or "\r" in message:
         raise WorkloreError("commit message must be one non-empty line")
-    tree = _require_staged_tree(expected_tree)
+    if not _git_output("status", "--porcelain=v1", "--untracked-files=all"):
+        raise WorkloreError("working tree contains no changes to commit")
+    _require_reviewed_snapshot(expected_snapshot)
 
     _git_output("fetch", "--no-tags", remote, merge_ref)
     head = _require_expected_head(expected_head)
@@ -78,6 +151,12 @@ def land_reviewed(expected_head: str, expected_tree: str, message: str) -> str:
             "current branch must equal its remote branch before commit "
             f"(local={head}, remote={remote_head})"
         )
+    _require_reviewed_snapshot(expected_snapshot)
+
+    _git_output("add", "--all")
+    _require_reviewed_snapshot(expected_snapshot)
+    tree = _require_staged_tree()
+    _require_reviewed_snapshot(expected_snapshot)
     _require_staged_tree(tree)
 
     _git_output("commit", "-m", message)

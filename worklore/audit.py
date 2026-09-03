@@ -95,6 +95,10 @@ def review_policy() -> str:
 def resolve_provider(provider: str) -> str:
     executable = shutil.which(provider)
     if executable is None and provider == "agy":
+        executable_name = "agy.exe" if os.name == "nt" else "agy"
+        managed = Path.home() / ".gemini" / "bin" / executable_name
+        if managed.is_file() and os.access(managed, os.X_OK):
+            return str(managed.resolve())
         if os.name == "nt":
             local_app_data = os.environ.get("LOCALAPPDATA")
             installed = (
@@ -112,7 +116,7 @@ def resolve_provider(provider: str) -> str:
             executable = str(installed)
     if executable is None:
         location = (
-            "PATH or its standard install location" if provider == "agy" else "PATH"
+            "PATH or a known install location" if provider == "agy" else "PATH"
         )
         raise CoReviewError(f"{provider} executable was not found on {location}")
     return str(Path(executable).resolve())

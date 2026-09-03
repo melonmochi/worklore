@@ -244,9 +244,10 @@ class SyncTests(IsolatedHomeTestCase):
                 cli.main(["--help"])
         self.assertEqual(result.exception.code, 0)
         self.assertNotIn("_land-reviewed", output.getvalue())
+        self.assertNotIn("_reviewed-snapshot", output.getvalue())
 
         head = "a" * 40
-        tree = "b" * 40
+        snapshot = "b" * 64
         with mock.patch("worklore.cli.land_reviewed") as land_reviewed:
             self.assertEqual(
                 cli.main(
@@ -254,15 +255,26 @@ class SyncTests(IsolatedHomeTestCase):
                         "_land-reviewed",
                         "--expected-head",
                         head,
-                        "--expected-tree",
-                        tree,
+                        "--expected-snapshot",
+                        snapshot,
                         "--message",
                         "refactor: reviewed",
                     ]
                 ),
                 0,
             )
-        land_reviewed.assert_called_once_with(head, tree, "refactor: reviewed")
+        land_reviewed.assert_called_once_with(
+            head, snapshot, "refactor: reviewed"
+        )
+
+    def test_internal_snapshot_command_prints_bounded_snapshot_identity(self):
+        with mock.patch(
+            "worklore.cli.reviewed_snapshot", return_value="a" * 64
+        ):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(cli.main(["_reviewed-snapshot"]), 0)
+        self.assertEqual(output.getvalue(), f"{'a' * 64}\n")
 
 
 class SkillContractTests(unittest.TestCase):
@@ -350,13 +362,26 @@ class SkillContractTests(unittest.TestCase):
         land_code = " ".join(self.skill_text("land-code").split())
         self.assertIn(
             "worklore _land-reviewed --expected-head <pre-commit-head> "
-            "--expected-tree <staged-tree> --message <subject>",
+            "--expected-snapshot <snapshot-sha256> --message <subject>",
             land_code,
         )
         self.assertIn("git push --set-upstream <remote> <branch>", land_code)
         self.assertIn(
-            "Do not invoke plain `git commit` or plain `git push` as a fallback",
+            "do not invoke plain `git fetch`, `git add`, `git commit`, or "
+            "`git push` as a fallback",
             land_code,
+        )
+
+    def test_existing_history_lands_through_one_durable_worklore_boundary(self):
+        land_code = " ".join(self.skill_text("land-code").split())
+        self.assert_contains(
+            land_code,
+            "capture the complete candidate snapshot with `worklore "
+            "_reviewed-snapshot`",
+            "the guarded landing helper owns the fresh remote comparison "
+            "before it stages anything",
+            "delegate fetch, snapshot revalidation, complete staging, commit, "
+            "and publication as one guarded operation",
         )
 
     def test_land_code_scopes_reusable_approval_to_guarded_worklore_writes(self):
@@ -367,8 +392,8 @@ class SkillContractTests(unittest.TestCase):
             "reusable approval for the exact `worklore _land-reviewed "
             "--expected-head` command prefix",
             "across repositories and reviewed snapshots until revoked",
-            "does not authorize implicit skill invocation, raw `git commit`, raw "
-            "`git push`, force push, destructive Git, merges, deployments",
+            "does not authorize implicit skill invocation, raw `git fetch`, "
+            "`git add`, `git commit`, or `git push`; force push; destructive Git",
             "provider transmission",
         )
 

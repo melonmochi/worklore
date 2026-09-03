@@ -91,6 +91,12 @@ Selecting `claude` invokes the Claude Code CLI directly and uses its existing
 OAuth session. `worklore` does not store provider credentials; a missing or
 unauthenticated provider fails explicitly.
 
+For `agy`, Worklore checks `PATH` first, then Antigravity's managed
+`~/.gemini/bin/agy` (`agy.exe` on Windows), followed by the legacy platform
+installation location. Restart the parent process only when relying on a newly
+changed `PATH`; the managed location is discovered directly. Worklore neither
+installs AGY nor reads or stores its credentials during discovery.
+
 The installed skills expose stable invocations:
 
 ```text

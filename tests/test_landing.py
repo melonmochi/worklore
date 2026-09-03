@@ -45,17 +45,14 @@ class ReviewedPushTests(unittest.TestCase):
         self._git("commit", "-m", message, cwd=self.repository)
         return self._git("rev-parse", "HEAD", cwd=self.repository)
 
-    def _stage(self, content):
-        (self.repository / "tracked.txt").write_text(content, encoding="utf-8")
-        self._git("add", "tracked.txt", cwd=self.repository)
-        return self._git("write-tree", cwd=self.repository)
-
-    def test_commits_and_pushes_exact_reviewed_tree_on_default_branch(self):
+    def test_stages_commits_and_pushes_exact_reviewed_snapshot_on_default_branch(self):
         original_head = self._git("rev-parse", "HEAD", cwd=self.repository)
-        tree = self._stage("reviewed\n")
+        (self.repository / "tracked.txt").write_text("reviewed\n", encoding="utf-8")
+        (self.repository / "new.txt").write_text("included\n", encoding="utf-8")
+        snapshot = landing.reviewed_snapshot()
 
         committed_head = landing.land_reviewed(
-            original_head, tree, "refactor: land reviewed tree"
+            original_head, snapshot, "refactor: land reviewed snapshot"
         )
 
         self.assertEqual(
@@ -66,20 +63,27 @@ class ReviewedPushTests(unittest.TestCase):
             self._git("rev-parse", "HEAD^", cwd=self.repository), original_head
         )
         self.assertEqual(
-            self._git("rev-parse", "HEAD^{tree}", cwd=self.repository), tree
+            (self.repository / "tracked.txt").read_text(encoding="utf-8"),
+            "reviewed\n",
+        )
+        self.assertEqual(
+            (self.repository / "new.txt").read_text(encoding="utf-8"),
+            "included\n",
         )
         self.assertEqual(
             self._git("status", "--porcelain=v1", cwd=self.repository), ""
         )
 
-    def test_rejects_changed_index_before_commit_or_push(self):
+    def test_rejects_changed_snapshot_before_staging_commit_or_push(self):
         original_head = self._git("rev-parse", "HEAD", cwd=self.repository)
-        tree = self._stage("reviewed\n")
+        (self.repository / "tracked.txt").write_text("reviewed\n", encoding="utf-8")
+        snapshot = landing.reviewed_snapshot()
         (self.repository / "tracked.txt").write_text("changed again\n", encoding="utf-8")
-        self._git("add", "tracked.txt", cwd=self.repository)
 
-        with self.assertRaisesRegex(WorkloreError, "expected index tree"):
-            landing.land_reviewed(original_head, tree, "refactor: must not land")
+        with self.assertRaisesRegex(WorkloreError, "expected snapshot"):
+            landing.land_reviewed(
+                original_head, snapshot, "refactor: must not land"
+            )
 
         self.assertEqual(
             self._git("rev-parse", "HEAD", cwd=self.repository), original_head
@@ -87,10 +91,52 @@ class ReviewedPushTests(unittest.TestCase):
         self.assertEqual(
             self._git("rev-parse", "refs/heads/main", cwd=self.remote), original_head
         )
+        self.assertEqual(
+            self._git("diff", "--cached", "--name-only", cwd=self.repository), ""
+        )
 
-    def test_rejects_remote_drift_before_commit(self):
+    def test_snapshot_binds_untracked_file_content(self):
         original_head = self._git("rev-parse", "HEAD", cwd=self.repository)
-        tree = self._stage("local reviewed\n")
+        untracked = self.repository / "new.txt"
+        untracked.write_text("reviewed\n", encoding="utf-8")
+        snapshot = landing.reviewed_snapshot()
+        untracked.write_text("changed\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(WorkloreError, "expected snapshot"):
+            landing.land_reviewed(
+                original_head, snapshot, "refactor: must not land"
+            )
+
+        self.assertEqual(
+            self._git("diff", "--cached", "--name-only", cwd=self.repository), ""
+        )
+
+    def test_snapshot_identity_is_stable_across_complete_staging(self):
+        (self.repository / "tracked.txt").write_text("reviewed\n", encoding="utf-8")
+        (self.repository / "new.txt").write_text("included\n", encoding="utf-8")
+        snapshot = landing.reviewed_snapshot()
+
+        self._git("add", "--all", cwd=self.repository)
+
+        self.assertEqual(landing.reviewed_snapshot(), snapshot)
+
+    @unittest.skipIf(os.name == "nt", "symlink creation is privilege-dependent")
+    def test_snapshot_distinguishes_untracked_file_types(self):
+        path = self.repository / "new.txt"
+        path.symlink_to("target")
+        symlink_snapshot = landing.reviewed_snapshot()
+        path.unlink()
+        path.write_text("target", encoding="utf-8")
+        path.chmod(0o777)
+
+        self.assertNotEqual(landing.reviewed_snapshot(), symlink_snapshot)
+
+    def test_rejects_remote_drift_before_staging_or_commit(self):
+        original_head = self._git("rev-parse", "HEAD", cwd=self.repository)
+        (self.repository / "tracked.txt").write_text(
+            "local reviewed\n", encoding="utf-8"
+        )
+        snapshot = landing.reviewed_snapshot()
         other = self.root / "other"
         self._git("clone", str(self.remote), str(other), cwd=self.root)
         self._git("config", "user.name", "Worklore Test", cwd=other)
@@ -102,13 +148,18 @@ class ReviewedPushTests(unittest.TestCase):
         self._git("push", "origin", "main", cwd=other)
 
         with self.assertRaisesRegex(WorkloreError, "must equal its remote branch"):
-            landing.land_reviewed(original_head, tree, "refactor: must not land")
+            landing.land_reviewed(
+                original_head, snapshot, "refactor: must not land"
+            )
 
         self.assertEqual(
             self._git("rev-parse", "HEAD", cwd=self.repository), original_head
         )
         self.assertEqual(
             self._git("rev-parse", "refs/heads/main", cwd=self.remote), remote_head
+        )
+        self.assertEqual(
+            self._git("diff", "--cached", "--name-only", cwd=self.repository), ""
         )
 
     def test_pushes_exactly_one_clean_reviewed_commit_to_existing_upstream(self):

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from . import WorkloreError
-from .landing import land_reviewed, push_reviewed
+from .landing import land_reviewed, push_reviewed, reviewed_snapshot
 
 DEFAULT_SETTINGS = {
     "co_reviewer": "none",
@@ -378,11 +378,22 @@ def _push_reviewed_main(arguments: Sequence[str]) -> int:
 def _land_reviewed_main(arguments: Sequence[str]) -> int:
     parser = argparse.ArgumentParser(prog="worklore _land-reviewed")
     parser.add_argument("--expected-head", required=True)
-    parser.add_argument("--expected-tree", required=True)
+    parser.add_argument("--expected-snapshot", required=True)
     parser.add_argument("--message", required=True)
     parsed = parser.parse_args(arguments)
     try:
-        land_reviewed(parsed.expected_head, parsed.expected_tree, parsed.message)
+        land_reviewed(
+            parsed.expected_head, parsed.expected_snapshot, parsed.message
+        )
+    except (WorkloreError, OSError) as error:
+        print(f"worklore: error: {error}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def _reviewed_snapshot_main() -> int:
+    try:
+        print(reviewed_snapshot())
     except (WorkloreError, OSError) as error:
         print(f"worklore: error: {error}", file=sys.stderr)
         return 2
@@ -412,6 +423,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return audit_main(raw_arguments[1:])
     if raw_arguments[:1] == ["_push-reviewed"]:
         return _push_reviewed_main(raw_arguments[1:])
+    if raw_arguments == ["_reviewed-snapshot"]:
+        return _reviewed_snapshot_main()
     if raw_arguments[:1] == ["_land-reviewed"]:
         return _land_reviewed_main(raw_arguments[1:])
 
