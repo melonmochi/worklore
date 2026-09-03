@@ -237,6 +237,33 @@ class SyncTests(IsolatedHomeTestCase):
             )
         push_reviewed.assert_called_once_with(head)
 
+    def test_internal_land_command_is_hidden_and_dispatches_to_bounded_helper(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            with self.assertRaises(SystemExit) as result:
+                cli.main(["--help"])
+        self.assertEqual(result.exception.code, 0)
+        self.assertNotIn("_land-reviewed", output.getvalue())
+
+        head = "a" * 40
+        tree = "b" * 40
+        with mock.patch("worklore.cli.land_reviewed") as land_reviewed:
+            self.assertEqual(
+                cli.main(
+                    [
+                        "_land-reviewed",
+                        "--expected-head",
+                        head,
+                        "--expected-tree",
+                        tree,
+                        "--message",
+                        "refactor: reviewed",
+                    ]
+                ),
+                0,
+            )
+        land_reviewed.assert_called_once_with(head, tree, "refactor: reviewed")
+
 
 class SkillContractTests(unittest.TestCase):
     def repository_text(self, relative_path):
@@ -320,12 +347,30 @@ class SkillContractTests(unittest.TestCase):
         )
 
     def test_land_code_uses_bounded_helper_for_existing_upstream(self):
-        land_code = self.skill_text("land-code")
+        land_code = " ".join(self.skill_text("land-code").split())
         self.assertIn(
-            "worklore _push-reviewed --expected-head <full-commit-sha>", land_code
+            "worklore _land-reviewed --expected-head <pre-commit-head> "
+            "--expected-tree <staged-tree> --message <subject>",
+            land_code,
         )
         self.assertIn("git push --set-upstream <remote> <branch>", land_code)
-        self.assertIn("do not invoke plain `git push` as a\n    fallback", land_code)
+        self.assertIn(
+            "Do not invoke plain `git commit` or plain `git push` as a fallback",
+            land_code,
+        )
+
+    def test_land_code_scopes_reusable_approval_to_guarded_worklore_writes(self):
+        land_code = " ".join(self.skill_text("land-code").split())
+        self.assert_contains(
+            land_code,
+            "A default branch name alone is not a stop condition",
+            "reusable approval for the exact `worklore _land-reviewed "
+            "--expected-head` command prefix",
+            "across repositories and reviewed snapshots until revoked",
+            "does not authorize implicit skill invocation, raw `git commit`, raw "
+            "`git push`, force push, destructive Git, merges, deployments",
+            "provider transmission",
+        )
 
     def test_land_code_owns_replacement_authorization_and_its_boundaries(self):
         land_code = " ".join(self.skill_text("land-code").split())

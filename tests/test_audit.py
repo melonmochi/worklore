@@ -61,7 +61,7 @@ class PacketTests(unittest.TestCase):
 
 
 class ProviderBoundaryTests(unittest.TestCase):
-    def test_provider_resolution_uses_path_only(self):
+    def test_provider_resolution_uses_path(self):
         with mock.patch("worklore.audit.shutil.which", return_value="/bin/claude"):
             self.assertEqual(
                 audit.resolve_provider("claude"), str(Path("/bin/claude").resolve())
@@ -69,6 +69,33 @@ class ProviderBoundaryTests(unittest.TestCase):
         with mock.patch("worklore.audit.shutil.which", return_value=None):
             with self.assertRaisesRegex(audit.CoReviewError, "PATH"):
                 audit.resolve_provider("claude")
+
+    @unittest.skipIf(os.name == "nt", "Unix installer convention")
+    def test_agy_resolution_uses_official_install_location_when_path_misses(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            executable = home / ".local" / "bin" / "agy"
+            executable.parent.mkdir(parents=True)
+            executable.write_bytes(b"agy")
+            executable.chmod(0o755)
+
+            with mock.patch("worklore.audit.shutil.which", return_value=None):
+                with mock.patch("worklore.audit.Path.home", return_value=home):
+                    self.assertEqual(
+                        audit.resolve_provider("agy"), str(executable.resolve())
+                    )
+
+    def test_agy_resolution_remains_fail_closed_when_unavailable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.dict("worklore.audit.os.environ", {}, clear=True):
+                with mock.patch("worklore.audit.shutil.which", return_value=None):
+                    with mock.patch(
+                        "worklore.audit.Path.home", return_value=Path(directory)
+                    ):
+                        with self.assertRaisesRegex(
+                            audit.CoReviewError, "standard install location"
+                        ):
+                            audit.resolve_provider("agy")
 
     def test_claude_auth_status_is_bounded_and_noninteractive(self):
         completed = subprocess.CompletedProcess(

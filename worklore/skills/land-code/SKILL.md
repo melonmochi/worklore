@@ -25,6 +25,18 @@ directly instead of asking the owner for landing authorization again. State in
 the justification that the later explicit skill invocation authorizes staging,
 committing, and pushing the current snapshot; replaces the earlier turn-local
 temporary restriction; and remains subject to the `land-code` Stop Conditions.
+A default branch name alone is not a stop condition or a reason to ask the owner
+again.
+
+When the platform supports durable command approvals, request reusable approval
+for the exact `worklore _land-reviewed --expected-head` command prefix. That
+approval covers this guarded Worklore capability across repositories and
+reviewed snapshots until revoked; the platform remains the authority for storing
+and revoking it. It does not authorize implicit skill invocation, raw
+`git commit`, raw `git push`, force push, destructive Git, merges, deployments,
+arbitrary shell writes, provider transmission, or other external systems. Every
+invocation must still establish the concrete repository, branch, upstream,
+reviewed `HEAD`, staged tree, and Stop Conditions anew.
 
 ## Stop Conditions
 
@@ -61,27 +73,27 @@ partially accepted working tree.
      and its upstream point to the same commit.
 5. Stage the complete reviewed working tree with `git add --all`. Verify that no
    unstaged or untracked paths remain and that the staged diff matches the
-   reviewed snapshot. Capture a new index fingerprint.
+   reviewed snapshot. Capture its exact staged tree with `git write-tree`.
 6. Inspect the staged content and recent history; derive one concise Conventional
    Commit subject using `<type>[optional scope]: <description>`. Match the type
    and scope to the actual change and repository convention; do not invent a
    scope or breaking-change marker.
 7. Run the recorded checks and any repository-wide gate required by the
    snapshot.
-8. Recheck status and the post-staging index fingerprint. Stop unless the working
-   tree has no unstaged, untracked, or unmerged paths and the index is unchanged.
+8. Recheck status and the staged tree. Stop unless the working tree has no
+   unstaged, untracked, or unmerged paths and the staged tree is unchanged.
    For initial publication, repeat the empty-remote check immediately before
    committing.
-9. Create one new commit. Never amend or bypass hooks.
-10. For initial publication, push with
-    `git push --set-upstream <remote> <branch>`. Otherwise, delegate the bounded
-    publication to
-    `worklore _push-reviewed --expected-head <full-commit-sha>`. The helper must
-    confirm the clean current branch is exactly that commit and exactly one
-    commit ahead of its existing upstream; do not invoke plain `git push` as a
-    fallback.
+9. For initial publication, create one commit and push with
+   `git push --set-upstream <remote> <branch>`. Otherwise, delegate commit and
+   publication as one guarded operation to
+   `worklore _land-reviewed --expected-head <pre-commit-head> --expected-tree
+   <staged-tree> --message <subject>`. The helper must refetch the configured
+   remote branch, confirm that it still equals the expected pre-commit `HEAD`,
+   commit exactly the expected staged tree without bypassing hooks, verify the
+   new commit's parent and tree, and perform a normal non-force push. Do not
+   invoke plain `git commit` or plain `git push` as a fallback.
+10. If commit succeeds but publication fails, preserve the local commit without
+    resetting or rewriting it and report the push failure precisely.
 11. Report the commit SHA, subject, branch, upstream, checks, staged paths, and
     final status.
-
-If commit succeeds but push fails, preserve the local commit, do not reset or
-rewrite it, and report the push failure precisely.

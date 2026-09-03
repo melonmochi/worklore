@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -93,8 +94,27 @@ def review_policy() -> str:
 
 def resolve_provider(provider: str) -> str:
     executable = shutil.which(provider)
+    if executable is None and provider == "agy":
+        if os.name == "nt":
+            local_app_data = os.environ.get("LOCALAPPDATA")
+            installed = (
+                Path(local_app_data) / "agy" / "bin" / "agy.exe"
+                if local_app_data
+                else None
+            )
+        else:
+            installed = Path.home() / ".local" / "bin" / "agy"
+        if (
+            installed is not None
+            and installed.is_file()
+            and os.access(installed, os.X_OK)
+        ):
+            executable = str(installed)
     if executable is None:
-        raise CoReviewError(f"{provider} executable was not found on PATH")
+        location = (
+            "PATH or its standard install location" if provider == "agy" else "PATH"
+        )
+        raise CoReviewError(f"{provider} executable was not found on {location}")
     return str(Path(executable).resolve())
 
 
