@@ -1,6 +1,6 @@
 ---
 name: prune-code
-description: Remove obsolete code, concepts, workflows, abstractions, compatibility surfaces, tests, commands, and documentation that no longer justify their existence. Use when asked to right-size a repository, run an anti-audit, delete superseded or one-off machinery, or challenge accidental complexity while preserving current behavior and real persistence, compatibility, security, integration, and operational obligations.
+description: Remove obsolete code, concepts, workflows, abstractions, compatibility surfaces, tests, commands, and documentation through a bounded convergence audit. Use when asked to right-size a repository, run an anti-audit, delete superseded or one-off machinery, or challenge accidental complexity while preserving current behavior and real persistence, compatibility, security, integration, and operational obligations.
 ---
 
 # Prune Code
@@ -14,13 +14,20 @@ generalization, or aesthetic refactoring.
 - Read the applicable repository instructions and inspect the current product
   semantics, callers, persisted formats, integrations, operational paths,
   tests, and documentation.
-- Identify only protected surfaces supported by concrete current obligations:
-  public interfaces still promised, persisted data that must remain readable,
-  migrations needed by real historical state, active integrations, security
-  boundaries, current user workflows, and current operations.
+- Freeze the current obligations for the full invocation: public interfaces
+  still promised, persisted data that must remain readable, migrations needed
+  by real historical state, active integrations, security and accessibility
+  boundaries, current user workflows, operations, and tests that encode a real
+  requirement.
+- Preserve seams supported by current semantic authority, persistence,
+  transport, failure lifecycle, or an independently changing responsibility.
+  Naming, patterns, file length, mock convenience, or a hypothetical future
+  backend do not protect a seam by themselves.
 - Preserve the existing Git index and unrelated work. Do not commit or push
   unless the user explicitly requests it.
-- Do not invent protected surfaces merely to avoid deletion.
+- Do not invent protected surfaces merely to avoid deletion. Less code never
+  outranks a concrete product, authority, data, security, or lifecycle
+  obligation.
 
 ## Challenge necessity
 
@@ -36,13 +43,16 @@ Apply the greenfield test:
 Inspect especially:
 
 - dead or superseded domain semantics and workflow states;
-- duplicate APIs, representations, commands, or execution paths;
+- duplicate APIs, representations, commands, helpers, wrappers, tests,
+  fixtures, or execution paths;
 - one-off migration, reconciliation, remediation, generation, UI, CLI, batch,
-  or orchestration machinery whose job is complete;
+  study, scaffold, or orchestration machinery whose job is complete;
 - speculative strategies, factories, plugins, policy layers, configuration
   modes, and generic extension points without real alternatives;
 - historical write paths, workflow APIs, and commands that survive after their
   compatibility purpose ended;
+- custom machinery replaced by the standard library, platform, or an existing
+  dependency; and
 - tests and documentation that keep obsolete semantics looking alive.
 
 Classify each inspected surface as:
@@ -55,6 +65,19 @@ Treat compatibility asymmetrically. Reading real historical data can justify
 survival; writing old formats, exposing old workflow APIs, and preserving old
 commands usually require separate current justification. Tests demonstrate
 historical intent, not a permanent requirement.
+
+## Optional simplification advisor
+
+When the environment already provides an applicable simplification advisor,
+it may be consulted at most once per audit pass. Do not search for, install,
+configure, vendor, or depend on one, and never let its absence block pruning.
+Skip it if consultation would introduce an unapproved external-transmission or
+authorization boundary.
+
+Advisor output is candidate input only. Independently accept or reject every
+candidate against the frozen obligations; Worklore owns the decision and the
+mutation. The advisor cannot expand scope, override a protected seam, or make
+its own edits.
 
 ## Prune
 
@@ -78,19 +101,39 @@ a net increase, treat it as presumptive evidence that the work became a
 refactor; continue only with a concrete explanation tied to a surviving
 invariant.
 
-## Validate and stop
+## Converge and stop
 
-- Run the repository's declared validation commands and its diff check.
-- Review the final diff for unrelated edits, replacement complexity, leaked
-  secrets, and accidental changes to protected surfaces.
-- Stop when the explicitly identified obsolete surfaces are gone. Do not use
-  deletion as permission to discover replacement work or redesign neighboring
-  live code.
+Use at most two mutation rounds. A round audits the current snapshot,
+adjudicates all in-scope candidates, applies the smallest coherent accepted
+set, and runs focused validation. If no candidate is accepted, the current
+snapshot is a fixed point and the result is `RIGHT-SIZED`.
+
+Any code mutation invalidates the current prune evidence. After a successful
+mutation round, re-audit the resulting snapshot before claiming convergence.
+If validation fails, stop as `BLOCKED`; do not stack another mutation on an
+unvalidated result.
+
+Keep only a transient record of accepted intent and affected paths for this
+invocation. Reject a later candidate that merely restores or reverses an
+earlier mutation unless a newly discovered frozen obligation requires it. If
+the obligations genuinely conflict, stop as `BLOCKED` rather than oscillating.
+
+After the second mutation round, perform one terminal read-only audit. If an
+accepted candidate still remains, stop as `OVERBUILT`, report the residue, and
+do not begin a third mutation round. Otherwise report `RIGHT-SIZED`.
+
+Run the repository's declared validation commands and diff check before the
+final result. Review the final diff for unrelated edits, replacement
+complexity, leaked secrets, and accidental changes to protected surfaces.
 
 Report compactly:
 
 ```text
 ANTI-AUDIT: RIGHT-SIZED | OVERBUILT | BLOCKED
+
+Rounds:
+- audit/adjudication/mutation/validation: ...
+- advisor: absent | skipped | candidates accepted/rejected
 
 Removed:
 - ...
@@ -105,10 +148,11 @@ Validation:
 - no new architectural concepts
 
 Unresolved:
-- none | concrete blocker
+- none | concrete blocker or terminal residue
 ```
 
-Use `RIGHT-SIZED` when no unjustified in-scope complexity remains, including
-when inspection proves no material deletion is warranted. Use `OVERBUILT` only
-when verified obsolete complexity remains. Use `BLOCKED` only when a concrete
-missing contract, data obligation, or authority prevents safe deletion.
+Use `RIGHT-SIZED` only when the current snapshot's latest audit has no accepted
+candidate, including when all candidates were rejected. Use `OVERBUILT` only
+when verified unjustified complexity remains after two mutation rounds. Use
+`BLOCKED` only for failed validation, unclear or conflicting obligations, or
+missing authority that prevents safe deletion.

@@ -94,6 +94,7 @@ unauthenticated provider fails explicitly.
 The installed skills expose stable invocations:
 
 ```text
+/organize-code
 /prune-code
 /review-code
 /fix-code
@@ -101,6 +102,15 @@ The installed skills expose stable invocations:
 /close-code
 /sanitize-code
 ```
+
+`organize-code` asks whether necessary code lives in the right place.
+`prune-code` asks whether that code still needs to exist. `close-code` ensures
+the final snapshot has freshly passed both simplification and correctness
+closure.
+
+`prune-code` may consult an already available external simplification advisor
+for candidates when this introduces no new authorization or transmission
+boundary.
 
 ## Develop
 

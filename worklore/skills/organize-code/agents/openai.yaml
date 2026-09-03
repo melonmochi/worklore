@@ -1,0 +1,7 @@
+interface:
+  display_name: "Organize Code"
+  short_description: "Clarify code ownership without semantic changes"
+  default_prompt: "Use $organize-code to clarify ownership and reason-to-change boundaries without changing product behavior."
+
+policy:
+  allow_implicit_invocation: false

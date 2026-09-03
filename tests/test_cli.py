@@ -126,6 +126,7 @@ class SyncTests(IsolatedHomeTestCase):
                 "close-code",
                 "fix-code",
                 "land-code",
+                "organize-code",
                 "prune-code",
                 "review-code",
                 "sanitize-code",
@@ -189,7 +190,7 @@ class SyncTests(IsolatedHomeTestCase):
         with mock.patch("worklore.cli.shutil.rmtree", side_effect=cleanup):
             installed, removed, destination = cli.sync_skills()
 
-        self.assertEqual(len(installed), 6)
+        self.assertEqual(len(installed), 7)
         self.assertEqual(removed, [])
         self.assertTrue((destination / cli.MANIFEST_NAME).is_file())
         self.assertTrue((destination / "review-code" / "SKILL.md").is_file())
@@ -304,14 +305,17 @@ class ReviewedPushTests(unittest.TestCase):
 
 
 class SkillContractTests(unittest.TestCase):
+    def repository_text(self, relative_path):
+        return (Path(__file__).parents[1] / relative_path).read_text(
+            encoding="utf-8"
+        )
+
     def skill_text(self, name):
-        return (
-            Path(__file__).parents[1]
-            / "worklore"
-            / "skills"
-            / name
-            / "SKILL.md"
-        ).read_text(encoding="utf-8")
+        return self.repository_text(f"worklore/skills/{name}/SKILL.md")
+
+    def assert_contains(self, text, *fragments):
+        for fragment in fragments:
+            self.assertIn(fragment, text)
 
     def test_public_skills_do_not_expose_deployment_arguments(self):
         self.assertNotIn("--with-claude", self.skill_text("review-code"))
@@ -323,15 +327,62 @@ class SkillContractTests(unittest.TestCase):
             self.assertNotIn(forbidden, close_code)
 
     def test_close_code_pauses_for_approval_and_stops_on_incomplete_review(self):
-        close_code = self.skill_text("close-code")
-        self.assertIn("co-review pauses before provider\n   invocation", close_code)
-        self.assertIn("resume at the co-review invocation", close_code)
-        self.assertIn("complete browser authentication", close_code)
-        self.assertIn("one allowed replacement invocation", close_code)
-        self.assertIn("Do\n   not run `fix-code` or `land-code` while paused", close_code)
-        self.assertIn(
-            "remains incomplete after its allowed authentication\n   recovery",
+        close_code = " ".join(self.skill_text("close-code").split())
+        self.assert_contains(
             close_code,
+            "co-review pauses before provider invocation",
+            "resume at the co-review invocation",
+            "complete browser authentication",
+            "one allowed replacement invocation",
+            "Do not run `fix-code` or `land-code` while paused",
+            "remains incomplete after its allowed authentication recovery",
+        )
+
+    def test_organize_code_is_packaged_as_explicit_only(self):
+        metadata = self.repository_text(
+            "worklore/skills/organize-code/agents/openai.yaml"
+        )
+        self.assert_contains(
+            metadata, "$organize-code", "allow_implicit_invocation: false"
+        )
+
+    def test_readme_exposes_the_stable_skill_roles(self):
+        readme = " ".join(self.repository_text("README.md").split())
+        self.assert_contains(
+            readme,
+            "/organize-code",
+            "`organize-code` asks whether necessary code lives in the right place",
+            "`prune-code` asks whether that code still needs to exist",
+            "`close-code` ensures the final snapshot has freshly passed both "
+            "simplification and correctness closure",
+        )
+
+    def test_prune_code_contract_is_bounded_and_advisor_neutral(self):
+        prune_code = " ".join(self.skill_text("prune-code").split())
+        self.assert_contains(
+            prune_code,
+            "at most two mutation rounds",
+            "Any code mutation invalidates the current prune evidence",
+            "one terminal read-only audit",
+            "do not begin a third mutation round",
+            "Advisor output is candidate input only",
+            "Do not search for, install, configure, vendor, or depend on one",
+            "unapproved external-transmission",
+        )
+        self.assertNotIn("ponytail", prune_code.lower())
+
+    def test_close_code_requires_fresh_prune_and_review_evidence(self):
+        close_code = " ".join(self.skill_text("close-code").split())
+        self.assert_contains(
+            close_code,
+            "Any code mutation invalidates both prune and review evidence",
+            "A fresh correctness review is valid only after `prune-code` has "
+            "converged on that exact snapshot",
+            "at most two review generations",
+            "at most one `fix-code` generation",
+            "begin the second and final review generation at step 2",
+            "Do not run a second fix generation or a third review generation",
+            "`prune-code` wholly owns convergence",
         )
 
     def test_land_code_uses_bounded_helper_for_existing_upstream(self):
