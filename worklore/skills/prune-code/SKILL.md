@@ -68,11 +68,12 @@ historical intent, not a permanent requirement.
 
 ## Optional simplification advisor
 
-When the environment already provides an applicable simplification advisor,
-it may be consulted at most once per audit pass. Do not search for, install,
-configure, vendor, or depend on one, and never let its absence block pruning.
-Skip it if consultation would introduce an unapproved external-transmission or
-authorization boundary.
+When the environment already provides an applicable simplification advisor and
+consultation introduces no new authorization or transmission boundary, consult
+it exactly once during every audit pass, including each post-mutation re-audit
+and the terminal read-only audit. Otherwise record it as absent or skipped. Do
+not search for, install, configure, vendor, or depend on one, and never let its
+absence block pruning.
 
 Advisor output is candidate input only. Independently accept or reject every
 candidate against the frozen obligations; Worklore owns the decision and the

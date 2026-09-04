@@ -338,9 +338,13 @@ class SkillContractTests(unittest.TestCase):
             "Any code mutation invalidates the current prune evidence",
             "one terminal read-only audit",
             "do not begin a third mutation round",
+            "consult it exactly once during every audit pass",
+            "including each post-mutation re-audit and the terminal read-only "
+            "audit",
+            "Otherwise record it as absent or skipped",
             "Advisor output is candidate input only",
             "Do not search for, install, configure, vendor, or depend on one",
-            "unapproved external-transmission",
+            "introduces no new authorization or transmission boundary",
         )
         self.assertNotIn("ponytail", prune_code.lower())
 
