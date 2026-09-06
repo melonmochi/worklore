@@ -13,7 +13,7 @@ class ReviewedPushTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.remote = self.root / "remote.git"
         self.repository = self.root / "repository"
-        self._git("init", "--bare", str(self.remote), cwd=self.root)
+        self._git("init", "--bare", "-b", "main", str(self.remote), cwd=self.root)
         self._git("init", "-b", "main", str(self.repository), cwd=self.root)
         self._git("config", "user.name", "Worklore Test", cwd=self.repository)
         self._git("config", "user.email", "test@example.invalid", cwd=self.repository)

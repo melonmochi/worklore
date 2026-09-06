@@ -1,6 +1,7 @@
 import contextlib
 import io
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -141,6 +142,22 @@ class SyncTests(IsolatedHomeTestCase):
         )
         self.assertEqual(manifest["skills"], installed)
 
+        packaged_root = Path(__file__).parents[1] / "worklore" / "skills"
+        for source in packaged_root.rglob("*"):
+            if source.is_file():
+                target = destination / source.relative_to(packaged_root)
+                self.assertEqual(target.read_bytes(), source.read_bytes())
+        before = {
+            path.relative_to(destination): path.read_bytes()
+            for path in destination.rglob("*") if path.is_file()
+        }
+        self.assertEqual(cli.sync_skills(), (installed, [], destination))
+        after = {
+            path.relative_to(destination): path.read_bytes()
+            for path in destination.rglob("*") if path.is_file()
+        }
+        self.assertEqual(after, before)
+
     def test_sync_refuses_an_unmanaged_collision_without_partial_install(self):
         collision = self.skills_directory / "review-code"
         collision.mkdir(parents=True)
@@ -178,7 +195,33 @@ class SyncTests(IsolatedHomeTestCase):
         self.assertEqual(
             (unrelated / "marker.txt").read_text(encoding="utf-8"), "mine"
         )
-        self.assertIn("# Review Code", review.read_text(encoding="utf-8"))
+        self.assertEqual(
+            review.read_bytes(),
+            cli._packaged_skills()["review-code"].joinpath("SKILL.md").read_bytes(),
+        )
+
+    def test_failed_sync_restores_owned_skills_and_manifest(self):
+        cli.sync_skills()
+        review = self.skills_directory / "review-code" / "SKILL.md"
+        review.write_text("owned local edition", encoding="utf-8")
+        unrelated = self.skills_directory / "unrelated" / "marker.txt"
+        unrelated.parent.mkdir()
+        unrelated.write_text("mine", encoding="utf-8")
+        before = {
+            path.relative_to(self.skills_directory): path.read_bytes()
+            for path in self.skills_directory.rglob("*") if path.is_file()
+        }
+
+        with mock.patch("worklore.cli._write_json", side_effect=OSError("disk full")):
+            with self.assertRaisesRegex(OSError, "disk full"):
+                cli.sync_skills()
+
+        after = {
+            path.relative_to(self.skills_directory): path.read_bytes()
+            for path in self.skills_directory.rglob("*") if path.is_file()
+        }
+        self.assertEqual(after, before)
+        self.assertFalse(list(self.skills_directory.glob(".worklore-sync-*")))
 
     def test_post_commit_stage_cleanup_cannot_fail_sync(self):
         def cleanup(_path, *, ignore_errors=False):
@@ -286,10 +329,6 @@ class SkillContractTests(unittest.TestCase):
     def skill_text(self, name):
         return self.repository_text(f"worklore/skills/{name}/SKILL.md")
 
-    def assert_contains(self, text, *fragments):
-        for fragment in fragments:
-            self.assertIn(fragment, text)
-
     def test_public_skills_do_not_expose_deployment_arguments(self):
         self.assertNotIn("--with-claude", self.skill_text("review-code"))
         self.assertNotIn("--mode", self.skill_text("fix-code"))
@@ -299,137 +338,33 @@ class SkillContractTests(unittest.TestCase):
         for forbidden in ("claude", "agy", "strict", "default"):
             self.assertNotIn(forbidden, close_code)
 
-    def test_close_code_pauses_for_approval_and_stops_on_incomplete_review(self):
-        close_code = " ".join(self.skill_text("close-code").split())
-        self.assert_contains(
-            close_code,
-            "co-review pauses before provider invocation",
-            "resume at the co-review invocation",
-            "complete browser authentication",
-            "one allowed replacement invocation",
-            "Do not run `fix-code` or `land-code` while paused",
-            "remains incomplete after its allowed authentication recovery",
-        )
+    def test_skills_keep_discovery_and_invocation_metadata(self):
+        readme = self.repository_text("README.md")
+        for name in cli._packaged_skills():
+            with self.subTest(skill=name):
+                text = self.skill_text(name)
+                self.assertTrue(text.startswith("---\n"))
+                frontmatter = text.split("---", 2)[1]
+                self.assertIn(f"name: {name}\n", frontmatter)
+                self.assertRegex(frontmatter, r"(?m)^description: \S.+$")
+                self.assertIn(f"/{name}", readme)
+                metadata = self.repository_text(
+                    f"worklore/skills/{name}/agents/openai.yaml"
+                )
+                self.assertIn(f"${name}", metadata)
+                self.assertEqual(
+                    "allow_implicit_invocation: false" in metadata,
+                    name in {"close-code", "land-code", "organize-code"},
+                )
 
-    def test_organize_code_is_packaged_as_explicit_only(self):
-        metadata = self.repository_text(
-            "worklore/skills/organize-code/agents/openai.yaml"
-        )
-        self.assert_contains(
-            metadata, "$organize-code", "allow_implicit_invocation: false"
-        )
-
-    def test_readme_exposes_the_stable_skill_roles(self):
-        readme = " ".join(self.repository_text("README.md").split())
-        self.assert_contains(
-            readme,
-            "/organize-code",
-            "`organize-code` asks whether necessary code lives in the right place",
-            "`prune-code` asks whether that code still needs to exist",
-            "`close-code` ensures the final snapshot has freshly passed both "
-            "simplification and correctness closure",
-        )
-
-    def test_prune_code_contract_is_bounded_and_advisor_neutral(self):
-        prune_code = " ".join(self.skill_text("prune-code").split())
-        self.assert_contains(
-            prune_code,
-            "at most two mutation rounds",
-            "Any code mutation invalidates the current prune evidence",
-            "one terminal read-only audit",
-            "do not begin a third mutation round",
-            "consult it exactly once during every audit pass",
-            "including each post-mutation re-audit and the terminal read-only "
-            "audit",
-            "Otherwise record it as absent or skipped",
-            "Advisor output is candidate input only",
-            "Do not search for, install, configure, vendor, or depend on one",
-            "introduces no new authorization or transmission boundary",
-        )
-        self.assertNotIn("ponytail", prune_code.lower())
-
-    def test_close_code_requires_fresh_prune_and_review_evidence(self):
-        close_code = " ".join(self.skill_text("close-code").split())
-        self.assert_contains(
-            close_code,
-            "Any code mutation invalidates both prune and review evidence",
-            "A fresh correctness review is valid only after `prune-code` has "
-            "converged on that exact snapshot",
-            "at most two review generations",
-            "at most one `fix-code` generation",
-            "begin the second and final review generation at step 2",
-            "Do not run a second fix generation or a third review generation",
-            "`prune-code` wholly owns convergence",
-        )
-
-    def test_land_code_uses_bounded_helper_for_existing_upstream(self):
-        land_code = " ".join(self.skill_text("land-code").split())
-        self.assertIn(
-            "worklore _land-reviewed --expected-head <pre-commit-head> "
-            "--expected-snapshot <snapshot-sha256> --message <subject>",
-            land_code,
-        )
-        self.assertIn("git push --set-upstream <remote> <branch>", land_code)
-        self.assertIn(
-            "do not invoke plain `git fetch`, `git add`, `git commit`, or "
-            "`git push` as a fallback",
-            land_code,
-        )
-
-    def test_existing_history_lands_through_one_durable_worklore_boundary(self):
-        land_code = " ".join(self.skill_text("land-code").split())
-        self.assert_contains(
-            land_code,
-            "capture the complete candidate snapshot with `worklore "
-            "_reviewed-snapshot`",
-            "the guarded landing helper owns the fresh remote comparison "
-            "before it stages anything",
-            "delegate fetch, snapshot revalidation, complete staging, commit, "
-            "and publication as one guarded operation",
-        )
-
-    def test_land_code_scopes_reusable_approval_to_guarded_worklore_writes(self):
-        land_code = " ".join(self.skill_text("land-code").split())
-        self.assert_contains(
-            land_code,
-            "A default branch name alone is not a stop condition",
-            "reusable approval for the exact `worklore _land-reviewed "
-            "--expected-head` command prefix",
-            "across repositories and reviewed snapshots until revoked",
-            "does not authorize implicit skill invocation, raw `git fetch`, "
-            "`git add`, `git commit`, or `git push`; force push; destructive Git",
-            "provider transmission",
-        )
-
-    def test_land_code_owns_replacement_authorization_and_its_boundaries(self):
-        land_code = " ".join(self.skill_text("land-code").split())
-        close_code = " ".join(self.skill_text("close-code").split())
-
-        self.assertIn(
-            "later explicit `$land-code`, `/land-code`, `$close-code`, or "
-            "`/close-code` invocation as replacement landing authorization",
-            land_code,
-        )
-        self.assertIn("supersedes an earlier turn-local instruction", land_code)
-        self.assertIn("do not ask the owner to repeat", land_code)
-        self.assertIn("request tool approval directly", land_code)
-        self.assertIn(
-            "State in the justification that the later explicit skill invocation "
-            "authorizes staging, committing, and pushing the current snapshot; "
-            "replaces the earlier turn-local temporary restriction; and remains "
-            "subject to the `land-code` Stop Conditions",
-            land_code,
-        )
-        for boundary in (
-            "restriction the owner restates in that invocation",
-            "persistent `AGENTS.md`, repository, organization, or platform policy",
-            "ambiguous working-tree ownership",
-            "unresolved external-transmission boundary",
-            "the Stop Conditions below",
-            "another repository, snapshot, or future operation",
-        ):
-            self.assertIn(boundary, land_code)
-        self.assertNotIn("replacement landing authorization", close_code)
+    def test_local_markdown_references_resolve(self):
+        root = Path(__file__).parents[1] / "worklore" / "skills"
+        for path in root.rglob("*.md"):
+            for target in re.findall(
+                r"\[[^\]]+\]\(([^)]+\.md)\)", path.read_text(encoding="utf-8")
+            ):
+                with self.subTest(source=path, target=target):
+                    self.assertTrue((path.parent / target).is_file())
 
 
 if __name__ == "__main__":

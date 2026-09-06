@@ -5,155 +5,71 @@ description: Remove obsolete code, concepts, workflows, abstractions, compatibil
 
 # Prune Code
 
-Right-size the requested repository by challenging necessity. Prefer deletion
-over replacement. Do not turn pruning into cleanup, modernization, redesign,
-generalization, or aesthetic refactoring.
+Challenge necessity in the requested scope. Prefer deletion over replacement;
+do not turn pruning into modernization, redesign or aesthetic refactoring.
 
-## Establish the boundary
+## Freeze current obligations
 
-- Read the applicable repository instructions and inspect the current product
-  semantics, callers, persisted formats, integrations, operational paths,
-  tests, and documentation.
-- Freeze the current obligations for the full invocation: public interfaces
-  still promised, persisted data that must remain readable, migrations needed
-  by real historical state, active integrations, security and accessibility
-  boundaries, current user workflows, operations, and tests that encode a real
-  requirement.
-- Preserve seams supported by current semantic authority, persistence,
-  transport, failure lifecycle, or an independently changing responsibility.
-  Naming, patterns, file length, mock convenience, or a hypothetical future
-  backend do not protect a seam by themselves.
-- Preserve the existing Git index and unrelated work. Do not commit or push
-  unless the user explicitly requests it.
-- Do not invent protected surfaces merely to avoid deletion. Less code never
-  outranks a concrete product, authority, data, security, or lifecycle
-  obligation.
+Read applicable instructions and inspect semantics, callers, tests, persisted
+formats, integrations and operations. Preserve promised APIs, reachable
+historical data/migrations, security/accessibility boundaries and current user
+workflows. Preserve the Git index and unrelated work; do not commit or push
+without explicit authorization.
 
-## Challenge necessity
+A seam survives for real semantic authority, persistence, transport, failure
+lifecycle or an independently changing responsibility—not its name, pattern,
+file size, mock convenience or hypothetical future backend.
 
-For each meaningful piece of complexity, ask which current invariant,
-user-visible behavior, external contract, persisted-data obligation, security
-boundary, or operational constraint requires it.
+Ask: if built today for these requirements and persisted data, would this
+concept exist? Do not invent obligations to avoid deletion.
 
-Apply the greenfield test:
+## Audit and adjudicate
 
-> If this repository were implemented today against only its current
-> requirements and persisted-data obligations, would this concept be added?
+Classify complexity as necessary, transitional with a current purpose, or
+obsolete/duplicated/one-off. Inspect dead semantics, duplicate paths, completed
+migration/study machinery, speculative extension points, custom substitutes
+for existing platform capabilities, and their tests/documentation.
 
-Inspect especially:
+Historical readers can remain necessary while historical writers and workflow
+APIs need separate justification. Tests show intent, not permanent obligation.
 
-- dead or superseded domain semantics and workflow states;
-- duplicate APIs, representations, commands, helpers, wrappers, tests,
-  fixtures, or execution paths;
-- one-off migration, reconciliation, remediation, generation, UI, CLI, batch,
-  study, scaffold, or orchestration machinery whose job is complete;
-- speculative strategies, factories, plugins, policy layers, configuration
-  modes, and generic extension points without real alternatives;
-- historical write paths, workflow APIs, and commands that survive after their
-  compatibility purpose ended;
-- custom machinery replaced by the standard library, platform, or an existing
-  dependency; and
-- tests and documentation that keep obsolete semantics looking alive.
+Use an existing simplification advisor only when explicitly requested or
+delegated by the current task, at most once per pass. Never install/configure
+one or let its absence block work. Its output is candidate input; independently
+judge it against frozen obligations. The advisor cannot edit or expand scope.
+Do not introduce a new authorization or external-transmission boundary.
 
-Classify each inspected surface as:
+## Mutation boundary
 
-1. necessary for a protected current obligation;
-2. transitional but still serving a concrete current purpose;
-3. obsolete, superseded, duplicated, or one-off and eligible for deletion.
+Delete unjustified machinery and tests/docs/commands serving only that
+machinery. Repair surviving callers only as needed. Retain historical readers
+and migration tests required by reachable data.
 
-Treat compatibility asymmetrically. Reading real historical data can justify
-survival; writing old formats, exposing old workflow APIs, and preserving old
-commands usually require separate current justification. Tests demonstrate
-historical intent, not a permanent requirement.
+Do not replace deletions with abstractions, shims, configuration switches,
+registries, manifests, evidence directories, frameworks or dependencies.
+Avoid unrelated renaming, formatting, moves, upgrades and hardening.
+Change tests only to protect surviving behavior. A net production-code increase
+requires a concrete surviving invariant, not a LOC argument.
 
-## Optional simplification advisor
+## Converge
 
-When the environment already provides an applicable simplification advisor and
-consultation introduces no new authorization or transmission boundary, consult
-it exactly once during every audit pass, including each post-mutation re-audit
-and the terminal read-only audit. Otherwise record it as absent or skipped. Do
-not search for, install, configure, vendor, or depend on one, and never let its
-absence block pruning.
+Allow at most two mutation rounds. Each audits, adjudicates the in-scope
+candidates, applies the accepted set and validates. Any mutation invalidates
+prune evidence: re-audit before claiming convergence. Failed validation stops
+as `BLOCKED`; do not stack changes on an unvalidated result.
 
-Advisor output is candidate input only. Independently accept or reject every
-candidate against the frozen obligations; Worklore owns the decision and the
-mutation. The advisor cannot expand scope, override a protected seam, or make
-its own edits.
+Keep only transient intent/path notes. Do not reverse an earlier deletion
+without a newly discovered frozen obligation. Conflicting obligations stop
+the pass rather than creating an oscillation.
 
-## Prune
+After the second round, perform a terminal read-only audit; no third mutation.
+Run declared repository checks and diff check. Inspect for unrelated edits,
+replacement complexity, secrets and damaged protected surfaces.
 
-- Delete category 3 production machinery directly.
-- Delete tests whose only purpose was to preserve the removed semantics.
-- Delete obsolete commands, documentation, and compatibility write paths tied
-  only to the removed behavior.
-- Repair surviving callers only as required by the deletion.
-- Retain historical readers and migration tests when reachable persisted data
-  still requires them.
-- Prefer one canonical surviving path when duplicate semantics exist.
+- `RIGHT-SIZED`: latest audit has no accepted remaining candidate.
+- `OVERBUILT`: verified unjustified complexity remains after two rounds.
+- `BLOCKED`: failed validation, unclear/conflicting obligations or missing
+  authority prevents safe deletion.
 
-Do not introduce a replacement abstraction, compatibility shim, configuration
-switch, migration framework, registry, manifest, evidence directory, or new
-dependency to make the deletion look cleaner. Do not broaden into unrelated
-renaming, formatting, directory moves, upgrades, hardening, or adjacent-system
-redesign. Add or modify tests only when needed to protect surviving behavior.
-
-Concept reduction matters more than deleted line count. If production code has
-a net increase, treat it as presumptive evidence that the work became a
-refactor; continue only with a concrete explanation tied to a surviving
-invariant.
-
-## Converge and stop
-
-Use at most two mutation rounds. A round audits the current snapshot,
-adjudicates all in-scope candidates, applies the smallest coherent accepted
-set, and runs focused validation. If no candidate is accepted, the current
-snapshot is a fixed point and the result is `RIGHT-SIZED`.
-
-Any code mutation invalidates the current prune evidence. After a successful
-mutation round, re-audit the resulting snapshot before claiming convergence.
-If validation fails, stop as `BLOCKED`; do not stack another mutation on an
-unvalidated result.
-
-Keep only a transient record of accepted intent and affected paths for this
-invocation. Reject a later candidate that merely restores or reverses an
-earlier mutation unless a newly discovered frozen obligation requires it. If
-the obligations genuinely conflict, stop as `BLOCKED` rather than oscillating.
-
-After the second mutation round, perform one terminal read-only audit. If an
-accepted candidate still remains, stop as `OVERBUILT`, report the residue, and
-do not begin a third mutation round. Otherwise report `RIGHT-SIZED`.
-
-Run the repository's declared validation commands and diff check before the
-final result. Review the final diff for unrelated edits, replacement
-complexity, leaked secrets, and accidental changes to protected surfaces.
-
-Report compactly:
-
-```text
-ANTI-AUDIT: RIGHT-SIZED | OVERBUILT | BLOCKED
-
-Rounds:
-- audit/adjudication/mutation/validation: ...
-- advisor: absent | skipped | candidates accepted/rejected
-
-Removed:
-- ...
-
-Preserved:
-- ...
-
-Validation:
-- existing check: PASS/FAIL
-- diff check: PASS/FAIL
-- production diff: +X / -Y
-- no new architectural concepts
-
-Unresolved:
-- none | concrete blocker or terminal residue
-```
-
-Use `RIGHT-SIZED` only when the current snapshot's latest audit has no accepted
-candidate, including when all candidates were rejected. Use `OVERBUILT` only
-when verified unjustified complexity remains after two mutation rounds. Use
-`BLOCKED` only for failed validation, unclear or conflicting obligations, or
-missing authority that prevents safe deletion.
+Report result, rounds, advisor use/skipping, removals, preserved obligations,
+validation, net diff and concrete residue. Do not create a reporting artifact.

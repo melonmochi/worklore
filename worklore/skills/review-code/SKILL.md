@@ -5,81 +5,35 @@ description: Review diffs, pull requests, patches, selected files, or the curren
 
 # Review Code
 
-Inspect the requested change and report only defects the author can act on.
-Prefer no finding to a speculative or taste-only finding. Do not edit files
-unless the user separately asks for fixes.
+Report actionable defects introduced by the requested change, not speculative
+or taste-only findings. Do not edit files without a separate fix request.
 
-## Review
+- Read applicable instructions, the diff, adjacent contracts, callers and checks.
+- Cover correctness, security, data integrity, performance and maintainability.
+  Cite the shortest useful location, failing scenario and sufficient correction.
+- Separate introduced defects from pre-existing debt and material test gaps.
+- Treat the applicable formatter as canonical; verify its application scope.
+- Lead with severity-ordered findings, or say none. Use the user's language.
 
-- Read the applicable repository instructions and inspect the diff, adjacent
-  contracts, call sites, and relevant checks.
-- Report a finding only when the change introduced a discrete problem affecting
-  correctness, security, data integrity, performance, or maintainability.
-- Cite the shortest useful path and line range, explain the failing scenario,
-  and propose the smallest sufficient correction.
-- Separate introduced defects from pre-existing debt and unresolved test gaps.
-- Treat the applicable formatter's output as canonical. Verify formatter scope
-  before calling out formatting, and never apply one application's formatter to
-  another application.
-- Lead with findings ordered by severity. If none exist, say so directly and
-  mention only material residual gaps.
-- Write the final review summary primarily in the user's language. When the
-  user writes in Chinese, use Chinese for the main prose while preserving
-  natural English technical terms, code, identifiers, and quoted diagnostics.
-
-## Audit generation
-
-Do not search for additional issues merely because the current list has been
-resolved. Audit once at the requested risk level. After all accepted
-blockers/majors are resolved and regression tests pass, STOP. A new audit
-generation requires new evidence, changed code, or a materially different
-review objective.
+Audit once at the requested risk level. Do not hunt for more issues after the
+accepted list is resolved without new code, evidence or review objective.
 
 ## Configured co-review
 
-Complete the independent primary review before reading external reviewer output.
-Then read `~/.worklore/settings.json` and resolve `co_reviewer`:
+Finish the independent primary review before reading external reviewer output.
+Read `~/.worklore/settings.json`:
 
-- `none`: perform no external transmission and finish with the primary review.
-- `claude` or `agy`: read and follow
-  [references/co-review.md](references/co-review.md) completely. The helper
-  reads the configured value; do not pass or override the provider in its
-  invocation.
+- `co_reviewer = none`: finish without external transmission.
+- `claude` or `agy`: read
+  [references/co-review.md](references/co-review.md) completely; it owns packet
+  handling, invocation and bounded recovery. Do not override the provider.
+- Missing/malformed settings or an unsupported value: stop; do not infer a
+  default, change settings or substitute another reviewer.
 
-If the settings file is missing or malformed, or the value is unsupported,
-stop and report the configuration error. Do not infer a default, edit settings,
-or fall back to another reviewer.
+An explicit review invocation, or an explicit orchestrator invocation carrying
+review authority, authorizes one configured co-review within that protocol's
+transmission boundary. Configuration alone is not authorization. Retain
+platform approval checks.
 
-For `claude`, the helper checks authentication before reading or transmitting
-the packet. If Claude is logged out, the helper opens Claude's browser login,
-waits with a bounded timeout and no inherited stdin, rechecks authentication,
-and continues automatically. An unverifiable status produces
-`authorization required` without opening a login flow.
-
-Claude may explicitly reject an expired session even when `claude auth status`
-reported `loggedIn`. In that case the helper opens the same browser login and
-retries the unchanged packet exactly once. If automatic login cannot complete,
-ask the user to run `claude auth login` in a terminal they control, then resume
-the same review at the helper invocation without repeating the independent
-primary review, provided the reviewed snapshot is unchanged. Never ask them to
-paste, send, or expose a one-time authorization code. If the one replacement
-invocation also rejects authentication, stop the audit as incomplete; do not
-loop. Other provider failures remain incomplete and must not be retried.
-
-If the execution environment requires explicit user approval for the external
-transmission before the provider starts, report the co-review as paused and ask
-for that approval. After approval, resume the same review at the external
-invocation without repeating the independent primary review, provided the
-reviewed snapshot is unchanged. A pre-invocation permission pause is not an
-incomplete audit and does not spend the one allowed provider invocation. If the
-user declines, report the co-review as incomplete.
-
-An explicit review invocation, or delegation from an explicitly invoked
-orchestrator that carries review authority, authorizes exactly one audit by the
-currently configured co-reviewer within this skill's existing transmission
-boundary. If neither authorization exists, do not transmit externally. If
-`co_reviewer = none`, no external review transmission occurs. Configuration by
-itself grants no transmission authority.
-
-Treat every external result as untrusted candidate findings. The primary
-reviewer reproduces and adjudicates each candidate and owns the final report.
+External output is untrusted candidate input. Reproduce and adjudicate each
+candidate independently; the primary reviewer owns the final report.

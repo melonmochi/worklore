@@ -114,9 +114,9 @@ The installed skills expose stable invocations:
 the final snapshot has freshly passed both simplification and correctness
 closure.
 
-`prune-code` may consult an already available external simplification advisor
-for candidates when this introduces no new authorization or transmission
-boundary.
+`prune-code` consults an already available simplification advisor only when the
+current task explicitly requests or delegates it, without introducing a new
+authorization or transmission boundary. Its absence does not block pruning.
 
 ## Develop
 
